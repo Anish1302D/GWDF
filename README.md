@@ -333,3 +333,104 @@ wellcast/
 ```
  
 ---
+
+## 10. Implementation plan
+
+Full operational planning and engineering specifications live in [`Docs/`](./Docs/README.md) and [`ai_logs/`](./ai_logs/SESSION_INDEX.md):
+
+- [`Docs/IMPLEMENTATION_PLAN.md`](./Docs/IMPLEMENTATION_PLAN.md) — 10-phase end-to-end hackathon roadmap and fallback gates
+- [`Docs/EXECUTION_PLAN.md`](./Docs/EXECUTION_PLAN.md) — 44-task operational runbook (`T0.1`–`T10.4`), decision register, and tracker
+- [`Docs/WORKFLOW.md`](./Docs/WORKFLOW.md) — Git, AI session, Data, ML, API, and CloudFront workflows
+- [`Docs/ARCHITECTURE_AND_DATA_SPEC.md`](./Docs/ARCHITECTURE_AND_DATA_SPEC.md) — S3 lake layout, schemas, and zero-leakage Athena SQL
+- [`Docs/ML_SPEC.md`](./Docs/ML_SPEC.md) — Residual Monotone XGBoost, P10/P90 quantiles, risk calibration, and scenarios
+- [`Docs/API_AND_FRONTEND_SPEC.md`](./Docs/API_AND_FRONTEND_SPEC.md) — REST contracts, 7-step React/Leaflet UI spec, and EN/HI/MR localization
+- [`Docs/AWS_INFRA_AND_SECURITY.md`](./Docs/AWS_INFRA_AND_SECURITY.md) — Least-privilege IAM JSON policies, Budgets, and CloudFront OAC
+- [`Docs/TESTING_AND_QA_CHECKLIST.md`](./Docs/TESTING_AND_QA_CHECKLIST.md) — 5-layer test suite, demo video script, and Judge Q&A guide
+
+---
+
+## 11. Setup and deployment
+
+### Local end-to-end execution
+
+```powershell
+# 1. Create virtual environment and install dependencies
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r ml/requirements.txt pytest
+
+# 2. Run data cleaning, SQL feature engineering, ML training, and 4-scenario JSON export
+.\.venv\Scripts\python.exe data/scripts/fetch_and_clean.py
+.\.venv\Scripts\python.exe data/scripts/build_features_local.py
+.\.venv\Scripts\python.exe ml/train.py
+.\.venv\Scripts\python.exe ml/make_forecasts.py
+
+# 3. Run unit & end-to-end verification suite
+.\.venv\Scripts\python.exe -m pytest -v
+
+# 4. Start local Lambda API server (Terminal 1) and React Vite app (Terminal 2)
+.\.venv\Scripts\python.exe backend/local_server.py --port 8000
+cd frontend && npm install && npm run dev
+```
+
+### AWS deployment (`ap-south-1` Mumbai)
+
+1. Configure your non-root IAM CLI profile (`aws configure --profile wellcast`) and set a \$5 AWS Budgets alert (see [`Docs/AWS_INFRA_AND_SECURITY.md`](./Docs/AWS_INFRA_AND_SECURITY.md)).
+2. Create private S3 buckets (`FORECAST_BUCKET` and `WEB_BUCKET`), Glue database `wellcast`, Athena workgroup `wellcast-wg` (`100 MB` scan cap), Lambda `wellcast-api`, HTTP API Gateway `/prod`, and CloudFront OAC distribution.
+3. Run a managed short-lived SageMaker training job (`ml/launch_sagemaker_job.py`) and deploy all assets in one command:
+   ```powershell
+   .\infra\deploy.ps1 -ForecastBucket <data-bucket> -WebBucket <web-bucket> -CloudFrontDistId <dist-id>
+   .\infra\audit_aws_cost.ps1 -DataBucket <data-bucket> -WebBucket <web-bucket>
+   ```
+
+---
+
+## 12. Cost guardrails
+
+- **AWS Budgets** alert configured before any cloud resource creation
+- **Short-lived SageMaker Training Jobs** (`MaxRuntimeInSeconds=600` on `ml.m5.large`) — zero persistent notebooks or hosted endpoints
+- **Precomputed static S3 JSON** for all 4 rainfall scenarios (`100%`, `90%`, `80%`, `70%`) plus 5-minute Lambda memory cache
+- **Snappy Parquet** storage + Athena workgroup `100 MB` per-query scan limit + 7-day S3 lifecycle rule on `athena-results/`
+- **Estimated monthly run cost:** **< \$1.00 USD** at single-state prototype scale
+
+---
+
+## 13. Impact and metrics
+
+Verified results on **Maharashtra (`356` blocks across `36` districts)**:
+
+| Metric | Result |
+|---|---|
+| Raw monitoring-well records processed (CGWB + GSDA via NWIC) | `756,542` readings (`94,371` valid `2013–2025` seasonal readings) |
+| Clean leak-free block-season feature rows | `7,860` rows (`5,549` supervised pairs; `100%` block match rate) |
+| Chronological split | Train `2014–2023` · Validation `2024` · Untouched Holdout Test `2025` |
+| Seasonal Naive baseline (2025 holdout) | `MAE = 0.8727 m` · `RMSE = 1.2246 m` · `R² = 0.8913` (`Pre-Monsoon MAE = 1.0226 m`) |
+| **Residual Monotone XGBoost (2025 holdout)** | **`MAE = 0.8703 m`** · **`RMSE = 1.1723 m`** · **`R² = 0.9004`** (**`Pre-Monsoon MAE = 0.9441 m`, +7.7% skill**) |
+| **Empirical P10–P90 interval coverage** | **`91.9%`** on untouched 2025 holdout |
+| Simplified block boundary GeoJSON | `455.7 KB` (`356` polygons for fast mobile 4G loading) |
+
+---
+
+## 14. Limitations and honest caveats
+
+- **Zero fabricated data:** Blocks with fewer than 4 historical seasonal observations are explicitly labelled `Insufficient Data` rather than imputed with synthetic numbers.
+- **Spatial resolution:** Block water levels represent the median of public CGWB/GSDA monitoring wells within each taluka; individual borewells can vary due to fractured Deccan basalt geology and local pumping. Monthly precipitation is derived from district-level NASA POWER agroclimatology grids (`2012–2025`).
+- **Decision support:** Forecasts complement — and do not replace — local hydrogeological surveys or official GSDA/CGWB advisories.
+
+---
+
+## 15. Roadmap
+
+1. **Multi-state onboarding:** Extend the state-agnostic `<STATE2>-<DIST3>-<SEQ3>` pipeline to Gujarat, Rajasthan, Karnataka, Punjab, and Telangana via NWIC feeds.
+2. **Higher-resolution gridded & telemetry fusion:** Incorporate IMD `0.25°` gridded daily rainfall and NWIC 6-hourly DWLR telemetry stations where station density permits.
+3. **Automated seasonal refresh:** Activate EventBridge scheduled seasonal re-ingestion and notifications for district water officers ahead of pre-monsoon sowing.
+
+---
+
+## 16. Hackathon submission checklist
+
+- [x] Verified public datasets cited with licences in [`DATA_SOURCES.md`](./DATA_SOURCES.md)
+- [x] Leak-free SQL feature pipeline (`sql/01`–`03`) and chronological holdout evaluation (`ml/train.py`, `ml/evaluate.py`)
+- [x] Precomputed 100% / 90% / 80% / 70% rainfall scenarios and multilingual advice (English, Hindi, Marathi)
+- [x] Serverless Lambda API (`backend/lambda_handler.py`) + React & Leaflet web app (`frontend/`) + Planner CSV export
+- [x] Least-privilege IAM policies (`infra/iam-policies/`), deploy scripts (`infra/deploy.ps1`), and Idea Brief / Build Summary (`Docs/`)
+- [ ] Deploy live CloudFront URL, record `< 3 min` demo video, and submit on Techfest portal (target: 29 Nov evening)

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 480" width="1120" height="480" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <rect width="1120" height="480" fill="#F8FAFC" rx="14"/>
+  <text x="36" y="42" font-size="22" font-weight="700" fill="#0C4A6E">WellCast — Serverless AWS Architecture (ap-south-1 Mumbai)</text>
+  <text x="36" y="66" font-size="13" fill="#475569">Zero-Idle-Compute Lakehouse, Ephemeral SageMaker Training, and Precomputed Edge Serving</text>
+
+  <!-- Data Sources -->
+  <rect x="30" y="96" width="210" height="330" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="48" y="124" font-size="14" font-weight="700" fill="#0F172A">1. Public Data Sources</text>
+  <rect x="48" y="144" width="174" height="62" rx="8" fill="#E0F2FE" stroke="#7DD3FC"/>
+  <text x="60" y="168" font-size="12" font-weight="700" fill="#0369A1">CGWB &amp; GSDA (NWIC)</text>
+  <text x="60" y="186" font-size="11" fill="#334155">756k Well Readings (mbgl)</text>
+  <rect x="48" y="222" width="174" height="62" rx="8" fill="#E0F2FE" stroke="#7DD3FC"/>
+  <text x="60" y="246" font-size="12" font-weight="700" fill="#0369A1">NASA POWER / IMD</text>
+  <text x="60" y="264" font-size="11" fill="#334155">Monthly Rain &amp; Normals</text>
+  <rect x="48" y="300" width="174" height="62" rx="8" fill="#E0F2FE" stroke="#7DD3FC"/>
+  <text x="60" y="324" font-size="12" font-weight="700" fill="#0369A1">LGD / Census GeoJSON</text>
+  <text x="60" y="342" font-size="11" fill="#334155">356 Maharashtra Blocks</text>
+
+  <!-- S3 Lake -->
+  <rect x="278" y="96" width="235" height="330" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="296" y="124" font-size="14" font-weight="700" fill="#0F172A">2. Amazon S3 Data Lake</text>
+  <rect x="296" y="144" width="199" height="50" rx="8" fill="#DCFCE7" stroke="#86EFAC"/>
+  <text x="310" y="167" font-size="12" font-weight="700" fill="#14532D">s3://.../raw/ (Parquet)</text>
+  <text x="310" y="183" font-size="11" fill="#334155">block, water_level, rainfall</text>
+  <rect x="296" y="208" width="199" height="50" rx="8" fill="#DCFCE7" stroke="#86EFAC"/>
+  <text x="310" y="231" font-size="12" font-weight="700" fill="#14532D">s3://.../curated/features/</text>
+  <text x="310" y="247" font-size="11" fill="#334155">Zero-leakage seasonal lags</text>
+  <rect x="296" y="272" width="199" height="50" rx="8" fill="#FEF3C7" stroke="#FCD34D"/>
+  <text x="310" y="295" font-size="12" font-weight="700" fill="#78350F">s3://.../forecasts/ (Parquet)</text>
+  <text x="310" y="311" font-size="11" fill="#334155">100%, 90%, 80%, 70% rain</text>
+  <rect x="296" y="336" width="199" height="58" rx="8" fill="#FEE2E2" stroke="#FCA5A5"/>
+  <text x="310" y="359" font-size="12" font-weight="700" fill="#7F1D1D">s3://.../api/ (Static JSON)</text>
+  <text x="310" y="376" font-size="11" fill="#334155">blocks, rankings, history</text>
+
+  <!-- Analytics & ML -->
+  <rect x="552" y="96" width="248" height="330" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="570" y="124" font-size="14" font-weight="700" fill="#0F172A">3. Serverless SQL &amp; ML</text>
+  <rect x="570" y="144" width="212" height="62" rx="8" fill="#F3E8FF" stroke="#D8B4FE"/>
+  <text x="584" y="168" font-size="12" font-weight="700" fill="#581C87">AWS Glue + Amazon Athena</text>
+  <text x="584" y="186" font-size="11" fill="#334155">CTAS 02_features.sql (100MB cap)</text>
+  <rect x="570" y="224" width="212" height="82" rx="8" fill="#F3E8FF" stroke="#D8B4FE"/>
+  <text x="584" y="248" font-size="12" font-weight="700" fill="#581C87">Amazon SageMaker Job</text>
+  <text x="584" y="266" font-size="11" fill="#334155">Residual Monotone XGBoost</text>
+  <text x="584" y="284" font-size="11" fill="#334155">+ P10/P90 Quantiles (ephemeral)</text>
+  <rect x="570" y="324" width="212" height="68" rx="8" fill="#F1F5F9" stroke="#CBD5E1"/>
+  <text x="584" y="348" font-size="12" font-weight="700" fill="#0F172A">EventBridge + CloudWatch</text>
+  <text x="584" y="366" font-size="11" fill="#334155">Seasonal refresh &amp; error alarms</text>
+
+  <!-- Serving -->
+  <rect x="838" y="96" width="252" height="330" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="856" y="124" font-size="14" font-weight="700" fill="#0F172A">4. Edge &amp; API Serving</text>
+  <rect x="856" y="144" width="216" height="74" rx="8" fill="#FFEDD5" stroke="#FDBA74"/>
+  <text x="870" y="168" font-size="12" font-weight="700" fill="#9A3412">AWS Lambda + API Gateway</text>
+  <text x="870" y="186" font-size="11" fill="#334155">Python 3.12 · 5m TTL Cache</text>
+  <text x="870" y="202" font-size="11" fill="#334155">5 REST Routes + CORS</text>
+  <rect x="856" y="236" width="216" height="84" rx="8" fill="#DBEAFE" stroke="#93C5FD"/>
+  <text x="870" y="260" font-size="12" font-weight="700" fill="#1E40AF">CloudFront + Private S3 (OAC)</text>
+  <text x="870" y="278" font-size="11" fill="#334155">React + Leaflet Risk Map</text>
+  <text x="870" y="296" font-size="11" fill="#334155">Scenario Slider · EN/HI/MR</text>
+  <rect x="856" y="336" width="216" height="58" rx="8" fill="#F1F5F9" stroke="#CBD5E1"/>
+  <text x="870" y="359" font-size="12" font-weight="700" fill="#0F172A">QuickSight / Planner View</text>
+  <text x="870" y="376" font-size="11" fill="#334155">Ranked At-Risk Blocks &amp; CSV</text>
+
+  <!-- Arrows -->
+  <g stroke="#0369A1" stroke-width="2" fill="none">
+    <line x1="240" y1="175" x2="276" y2="175"/>
+    <line x1="513" y1="175" x2="550" y2="175"/>
+    <line x1="513" y1="235" x2="550" y2="255"/>
+    <line x1="550" y1="285" x2="513" y2="298"/>
+    <line x1="513" y1="365" x2="836" y2="185"/>
+    <line x1="964" y1="218" x2="964" y2="235"/>
+  </g>
+
+  <text x="36" y="456" font-size="12" font-weight="600" fill="#334155">Guardrails: AWS Budgets ($5 alert) · IAM Least-Privilege Roles · Block Public Access ON · Estimated Prototype Spend &lt; $1/month</text>
+</svg>

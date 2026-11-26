@@ -1,0 +1,38 @@
+# Secrets & Environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.csv
+aws_credentials*
+
+# Local Large Raw Data, Lake & Model Artifacts
+data/raw_local/
+data/processed_local/
+ml/artifacts_local/
+*.parquet
+!data/sample/*.parquet
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Frontend Build & Dependencies
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Packaging Artifacts
+infra/build/
+*.zip
+*.tar.gz
+
+# OS / Editor
+.DS_Store
+Thumbs.db

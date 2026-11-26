@@ -1,0 +1,76 @@
+{
+  "appTitle": "वेलकास्ट (WellCast)",
+  "appSubtitle": "संकट येण्यापूर्वी भूजल ताण ओळखा — महाराष्ट्र तालुका अंदाज",
+  "farmerView": "शेतकरी विभाग",
+  "plannerView": "नियोजक डॅशबोर्ड",
+  "dataAndLimits": "डेटा स्रोत आणि मर्यादा",
+  "selectDistrict": "जिल्हा",
+  "allDistricts": "सर्व जिल्हे",
+  "selectBlock": "तालुका / ब्लॉक",
+  "searchBlockPlaceholder": "तालुका शोधा...",
+  "riskClasses": {
+    "Safe": "सुरक्षित (Safe)",
+    "Watch": "दक्षता (Watch)",
+    "Critical": "तीव्र धोका (Critical)",
+    "Insufficient Data": "अपुरा डेटा"
+  },
+  "forecastCard": {
+    "nextSeason": "अंदाज हंगाम",
+    "predictedDepth": "अंदाजित खोली",
+    "confidenceBand": "80% विश्वास मर्यादा (P10–P90)",
+    "currentDepth": "नुकतीच नोंदवलेली खोली",
+    "yoyChange": "वार्षिक बदल",
+    "wellsMonitored": "निरीक्षण विहिरी",
+    "mbglUnit": "मीटर जमिनीखाली",
+    "deeperWorseNote": "टीप: अधिक खोली (m bgl) म्हणजे अधिक भूजल ताण."
+  },
+  "scenario": {
+    "title": "पाऊस सरासरीपेक्षा कमी पडला तर काय होईल?",
+    "subtitle": "पूर्व-गणित परिस्थिती — दुष्काळाचा परिणाम पाहण्यासाठी स्लाइडर हलवा",
+    "stops": {
+      "normal": "100% सरासरी पाऊस",
+      "minus10": "90% (-10% पाऊस)",
+      "minus20": "80% (-20% तूट)",
+      "minus30": "70% (-30% तीव्र दुष्काळ)"
+    }
+  },
+  "chart": {
+    "title": "ऐतिहासिक भूजल पातळी आणि पुढील हंगामाचा अंदाज",
+    "yAxisLabel": "जमिनीखालील खोली (m bgl — खाली म्हणजे अधिक खोल)",
+    "historical": "नोंदवलेली पातळी (CGWB/GSDA)",
+    "predicted": "अंदाजित पातळी",
+    "confidence": "80% मर्यादा (P10–P90)",
+    "monsoonTitle": "ऐतिहासिक मान्सून पाऊस विरुद्ध सरासरी (मिमी)"
+  },
+  "advice": {
+    "title": "हंगामी पीक आणि जल व्यवस्थापन सल्ला",
+    "sourceNote": "जिल्हा पर्जन्यमान आणि तालुका निरीक्षण विहिरींच्या ऐतिहासिक मध्यावर आधारित."
+  },
+  "planner": {
+    "title": "जिल्हा व तालुका प्राधान्य क्रमवारी",
+    "subtitle": "पुनर्भरण उपक्रम, अनुदान आणि टँकर नियोजनासाठी जोखीम निर्देशांकानुसार यादी",
+    "exportCsv": "CSV डाउनलोड करा",
+    "totalBlocks": "एकूण तालुके",
+    "criticalBlocks": "तीव्र धोका",
+    "watchBlocks": "दक्षता यादी",
+    "safeBlocks": "सुरक्षित / स्थिर",
+    "insufficientBlocks": "अपुरा डेटा",
+    "colRank": "क्रमांक",
+    "colDistrict": "जिल्हा",
+    "colBlock": "तालुका",
+    "colCurrent": "सध्याची (m)",
+    "colPredicted": "अंदाज (m)",
+    "colRange": "P10–P90 (m)",
+    "colShift": "वार्षिक बदल",
+    "colRisk": "जोखीम वर्ग",
+    "colScore": "ताण निर्देशांक",
+    "inspectOnMap": "नकाशावर पहा"
+  },
+  "errors": {
+    "apiOfflineTitle": "वेलकास्ट API शी संपर्क होऊ शकला नाही",
+    "apiOfflineBody": "कृपया नेटवर्क तपासा आणि पुन्हा प्रयत्न करा.",
+    "retry": "पुन्हा प्रयत्न करा",
+    "insufficientTitle": "अपुरा ऐतिहासिक निरीक्षण डेटा",
+    "insufficientBody": "सार्वजनिक CGWB/GSDA नोंदींमध्ये या तालुक्यासाठी 4 पेक्षा कमी हंगामी नोंदी आहेत. वेलकास्ट कधीही काल्पनिक डेटा वापरत नाही."
+  }
+}

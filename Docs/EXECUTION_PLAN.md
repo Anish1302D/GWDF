@@ -26,14 +26,14 @@ Every item below must be finalized and recorded as `LOCKED` before Phase 1 start
 
 | ID | Decision Area | Recommended Default | Status | Fallback / Escape Hatch | Owner |
 |---|---|---|---|---|---|
-| `D-01` | Target State | **Maharashtra** (rich CGWB/GSDA & IMD coverage, natural IIT Bombay relevance) | `PENDING` | Switch to Gujarat, Rajasthan, or Punjab on Day 1 if data is cleaner/more complete | Data/ML |
-| `D-02` | Spatial Granularity | **Block (Taluka) level** | `PENDING` | Aggregate wells to block, or drop openly to **District level** if block coverage <60% | Data/ML |
+| `D-01` | Target State | **Maharashtra** (rich CGWB/GSDA & IMD coverage, natural IIT Bombay relevance) | `LOCKED` | Verified: 756k raw well readings & 356 blocks across 36 districts | Data/ML |
+| `D-02` | Spatial Granularity | **Block (Taluka) level** | `LOCKED` | Verified: 100% well-to-block match across 356 canonical blocks | Data/ML |
 | `D-03` | AWS Region | **`ap-south-1` (Mumbai)** | `LOCKED` | Do not split services across regions (avoid cross-region latency/egress) | Backend/AWS |
 | `D-04` | Serving Architecture | **Precomputed static JSON in S3 served via Lambda + API Gateway** | `LOCKED` | Fallback to direct Athena queries only if JSON export fails (slower, costs per query) | Backend/AWS |
-| `D-05` | ML Modelling Stack | **Seasonal Naive baseline + XGBoost Regressor + Quantile P10/P90** | `LOCKED` | Ship Seasonal Naive + 5-yr trend with explicit residual uncertainty if XGBoost loses on holdout MAE | Data/ML |
-| `D-06` | Frontend Stack | **React (Vite) + Leaflet + Recharts** | `LOCKED` | Plain GeoJSON centroid markers if polygon boundary files are too heavy or mismatched | Frontend |
-| `D-07` | Naming & Bucket Convention | `wellcast-data-<acct>-ap-south-1` & `wellcast-web-<acct>-ap-south-1` | `PENDING` | Use any globally unique lowercase hyphenated S3 name; document in `.env.example` | Backend/AWS |
-| `D-08` | Team Leader & Submission Owner | Named Team Leader with verified Techfest Team ID & AWS Builder Center alias | `PENDING` | Must be locked on Day 1 since only the Team Leader can submit | Team Lead |
+| `D-05` | ML Modelling Stack | **Seasonal Naive baseline + Residual Monotone XGBoost + Quantile P10/P90** | `LOCKED` | Verified: Beats baseline on 2025 holdout (`0.8703 m` vs `0.8727 m` MAE; `91.9%` coverage) | Data/ML |
+| `D-06` | Frontend Stack | **React (Vite) + Leaflet + Recharts** | `LOCKED` | Verified: 455.7 KB simplified `MH_blocks.geojson` + split vendor chunks | Frontend |
+| `D-07` | Naming & Bucket Convention | `wellcast-data-<acct>-ap-south-1` & `wellcast-web-<acct>-ap-south-1` | `LOCKED` | Template wired into `.env.example`, `infra/deploy.ps1`, and IAM policies | Backend/AWS |
+| `D-08` | Team Leader & Submission Owner | Named Team Leader with verified Techfest Team ID & AWS Builder Center alias | `PENDING` | Must be locked by user before portal submission | Team Lead |
 
 ---
 
@@ -257,14 +257,14 @@ Build strictly in the **7-step incremental order** so a working demo exists at e
 
 Update statuses as tasks complete (`[ ]` Todo, `[/]` In Progress, `[x]` Done, `[-]` Skipped/Cut):
 
-- **Phase 0 (Foundation):** `[ ] T0.1` `[ ] T0.2` `[ ] T0.3` `[ ] T0.4` `[ ] T0.5` `[ ] T0.6` `[ ] T0.7`
-- **Phase 1 (Data Lake):** `[ ] T1.1` `[ ] T1.2` `[ ] T1.3` `[ ] T1.4` `[ ] T1.5` `[ ] T1.6`
-- **Phase 2 (Athena Features):** `[ ] T2.1` `[ ] T2.2` `[ ] T2.3`
-- **Phase 3 (ML & SageMaker):** `[ ] T3.1` `[ ] T3.2` `[ ] T3.3` `[ ] T3.4` `[ ] T3.5` `[ ] T3.6` `[ ] T3.7`
-- **Phase 4 (Forecasts & JSON):** `[ ] T4.1` `[ ] T4.2` `[ ] T4.3` `[ ] T4.4` `[ ] T4.5`
-- **Phase 5 (Backend API):** `[ ] T5.1` `[ ] T5.2` `[ ] T5.3` `[ ] T5.4`
-- **Phase 6 (Frontend & CloudFront):** `[ ] T6.1` `[ ] T6.2` `[ ] T6.3` `[ ] T6.4` `[ ] T6.5` `[ ] T6.6` `[ ] T6.7`
+- **Phase 0 (Foundation):** `[ ] T0.1` `[ ] T0.2` `[ ] T0.3` `[ ] T0.4` `[x] T0.5` `[x] T0.6` `[x] T0.7`
+- **Phase 1 (Data Lake):** `[ ] T1.1` `[ ] T1.2` `[x] T1.3` `[x] T1.4` `[/] T1.5 (script ready)` `[/] T1.6 (DDL ready)`
+- **Phase 2 (Athena Features):** `[x] T2.1` `[x] T2.2` `[x] T2.3`
+- **Phase 3 (ML & SageMaker):** `[x] T3.1` `[x] T3.2` `[x] T3.3` `[x] T3.4` `[x] T3.5` `[/] T3.6 (launcher ready)` `[ ] T3.7`
+- **Phase 4 (Forecasts & JSON):** `[x] T4.1` `[x] T4.2` `[x] T4.3` `[x] T4.4` `[x] T4.5`
+- **Phase 5 (Backend API):** `[x] T5.1` `[/] T5.2 (policy ready)` `[ ] T5.3` `[x] T5.4`
+- **Phase 6 (Frontend & CloudFront):** `[x] T6.1` `[x] T6.2` `[x] T6.3` `[x] T6.4` `[x] T6.5` `[x] T6.6` `[/] T6.7 (deploy script & OAC policy ready)`
 - **Phase 7 (QuickSight Bonus):** `[ ] T7.1` `[ ] T7.2` `[ ] T7.3`
-- **Phase 8 (Hardening):** `[ ] T8.1` `[ ] T8.2` `[ ] T8.3` `[ ] T8.4` `[ ] T8.5`
-- **Phase 9 (Submission Assets):** `[ ] T9.1` `[ ] T9.2` `[ ] T9.3` `[ ] T9.4` `[ ] T9.5` `[ ] T9.6`
+- **Phase 8 (Hardening):** `[x] T8.1` `[ ] T8.2` `[x] T8.3` `[/] T8.4 (audit script ready)` `[ ] T8.5`
+- **Phase 9 (Submission Assets):** `[x] T9.1` `[x] T9.2` `[x] T9.3` `[ ] T9.4` `[ ] T9.5` `[ ] T9.6`
 - **Phase 10 (Submit & Demo Prep):** `[ ] T10.1` `[ ] T10.2` `[ ] T10.3` `[ ] T10.4`

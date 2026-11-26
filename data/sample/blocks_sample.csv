@@ -1,0 +1,41 @@
+block_id,state_code,state,district,block_name,extraction_stage,extraction_stage_code,lat,lon,granularity
+MH-AHI-001,MH,Maharashtra,Ahilyanagar,Akola,Unknown,-1,19.5137,73.9026,block
+MH-AHI-002,MH,Maharashtra,Ahilyanagar,Jamkhed,Unknown,-1,18.6602,75.3484,block
+MH-AHI-003,MH,Maharashtra,Ahilyanagar,Karjat,Unknown,-1,18.5652,74.9561,block
+MH-AHI-004,MH,Maharashtra,Ahilyanagar,Kopargaon,Unknown,-1,19.8753,74.4543,block
+MH-AHI-005,MH,Maharashtra,Ahilyanagar,Nagar,Unknown,-1,19.076,74.7461,block
+MH-AHI-006,MH,Maharashtra,Ahilyanagar,Nevasa,Unknown,-1,19.4726,74.9592,block
+MH-AHI-007,MH,Maharashtra,Ahilyanagar,Parner,Unknown,-1,19.0784,74.4064,block
+MH-AHI-008,MH,Maharashtra,Ahilyanagar,Pathardi,Unknown,-1,19.1717,75.1596,block
+MH-AHI-009,MH,Maharashtra,Ahilyanagar,Rahta,Unknown,-1,19.6783,74.5092,block
+MH-AHI-010,MH,Maharashtra,Ahilyanagar,Rahuri,Unknown,-1,19.4005,74.6162,block
+MH-AHI-011,MH,Maharashtra,Ahilyanagar,Sangamner,Unknown,-1,19.4927,74.2441,block
+MH-AHI-012,MH,Maharashtra,Ahilyanagar,Shevgaon,Unknown,-1,19.364,75.287,block
+MH-AHI-013,MH,Maharashtra,Ahilyanagar,Shrigonda,Unknown,-1,18.7033,74.6613,block
+MH-AHI-014,MH,Maharashtra,Ahilyanagar,Shrirampur,Unknown,-1,19.6303,74.7072,block
+MH-AKO-001,MH,Maharashtra,Akola,Akola,Unknown,-1,20.7326,77.0935,block
+MH-AKO-002,MH,Maharashtra,Akola,Akot,Unknown,-1,21.0586,77.0579,block
+MH-AKO-003,MH,Maharashtra,Akola,Balapur,Unknown,-1,20.7329,76.8339,block
+MH-AKO-004,MH,Maharashtra,Akola,Barshitakli,Unknown,-1,20.5256,77.1529,block
+MH-AKO-005,MH,Maharashtra,Akola,Murtijapur,Unknown,-1,20.7442,77.418,block
+MH-AKO-006,MH,Maharashtra,Akola,Patur,Unknown,-1,20.4298,76.85,block
+MH-AKO-007,MH,Maharashtra,Akola,Telhara,Unknown,-1,21.0446,76.8712,block
+MH-AMR-001,MH,Maharashtra,Amravati,Achalpur,Unknown,-1,21.2336,77.4676,block
+MH-AMR-002,MH,Maharashtra,Amravati,Amravati,Unknown,-1,20.9948,77.8115,block
+MH-AMR-003,MH,Maharashtra,Amravati,Anjangaon Surji,Unknown,-1,21.1199,77.3037,block
+MH-AMR-004,MH,Maharashtra,Amravati,Bhatkuli,Unknown,-1,20.9735,77.602,block
+MH-AMR-005,MH,Maharashtra,Amravati,Chandur Railway,Unknown,-1,20.7719,77.9684,block
+MH-AMR-006,MH,Maharashtra,Amravati,Chandurbazar,Unknown,-1,21.2653,77.6906,block
+MH-AMR-007,MH,Maharashtra,Amravati,Chikhaldara,Unknown,-1,21.4584,77.2459,block
+MH-AMR-008,MH,Maharashtra,Amravati,Daryapur,Unknown,-1,20.9536,77.3238,block
+MH-AMR-009,MH,Maharashtra,Amravati,Dhamangaon Railway,Unknown,-1,20.7516,78.1594,block
+MH-AMR-010,MH,Maharashtra,Amravati,Dharni,Unknown,-1,21.4839,76.9329,block
+MH-AMR-011,MH,Maharashtra,Amravati,Morshi,Unknown,-1,21.2773,77.9555,block
+MH-AMR-012,MH,Maharashtra,Amravati,Nandgaon-Khandeshwar,Unknown,-1,20.6917,77.7613,block
+MH-AMR-013,MH,Maharashtra,Amravati,Teosa,Unknown,-1,20.9754,78.076,block
+MH-AMR-014,MH,Maharashtra,Amravati,Warud,Unknown,-1,21.4599,78.2809,block
+MH-BEE-001,MH,Maharashtra,Beed,Ambejogai,Unknown,-1,18.7542,76.4624,block
+MH-BEE-002,MH,Maharashtra,Beed,Ashti,Unknown,-1,18.9074,75.0914,block
+MH-BEE-003,MH,Maharashtra,Beed,Bid,Unknown,-1,18.9265,75.7749,block
+MH-BEE-004,MH,Maharashtra,Beed,Dharur,Unknown,-1,18.886,76.1828,block
+MH-BEE-005,MH,Maharashtra,Beed,Georai,Unknown,-1,19.2388,75.7251,block

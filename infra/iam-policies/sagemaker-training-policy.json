@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3TrainReadAndModelWrite",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::${DATA_BUCKET}",
+        "arn:aws:s3:::${DATA_BUCKET}/curated/*",
+        "arn:aws:s3:::${DATA_BUCKET}/models/*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchTrainingLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": "arn:aws:logs:ap-south-1:${ACCOUNT_ID}:log-group:/aws/sagemaker/TrainingJobs:*"
+    },
+    {
+      "Sid": "PullOfficialSageMakerECR",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "appTitle": "WellCast",
+  "appSubtitle": "See groundwater stress before it hits — Maharashtra Block Forecasts",
+  "farmerView": "Farmer View",
+  "plannerView": "Planner Dashboard",
+  "dataAndLimits": "Data Sources & Caveats",
+  "selectDistrict": "District",
+  "allDistricts": "All Districts",
+  "selectBlock": "Block / Taluka",
+  "searchBlockPlaceholder": "Quick filter block...",
+  "riskClasses": {
+    "Safe": "Safe",
+    "Watch": "Watch",
+    "Critical": "Critical",
+    "Insufficient Data": "Insufficient Data"
+  },
+  "forecastCard": {
+    "nextSeason": "Forecast Season",
+    "predictedDepth": "Predicted Depth",
+    "confidenceBand": "80% Confidence Range (P10–P90)",
+    "currentDepth": "Latest Observed Depth",
+    "yoyChange": "Year-over-Year Shift",
+    "wellsMonitored": "Monitoring Wells",
+    "mbglUnit": "m below ground",
+    "deeperWorseNote": "Note: Deeper m bgl means greater groundwater stress."
+  },
+  "scenario": {
+    "title": "What if Monsoon Rainfall Drops Below Normal?",
+    "subtitle": "Precomputed scenarios — drag to stress-test aquifer resilience instantly",
+    "stops": {
+      "normal": "100% Normal Rain",
+      "minus10": "90% (-10% Rain)",
+      "minus20": "80% (-20% Drought)",
+      "minus30": "70% (-30% Severe)"
+    }
+  },
+  "chart": {
+    "title": "Historical Groundwater Depth & Next-Season Forecast",
+    "yAxisLabel": "Depth below ground (m bgl — lower on chart is deeper)",
+    "historical": "Observed Depth (CGWB/GSDA)",
+    "predicted": "Forecast Depth",
+    "confidence": "80% Range (P10–P90)",
+    "monsoonTitle": "Historical Monsoon Rainfall vs Normal (mm)"
+  },
+  "advice": {
+    "title": "Seasonal Advisory & Water Guidance",
+    "sourceNote": "District-gridded rainfall + historical block monitoring-well median."
+  },
+  "planner": {
+    "title": "District & Block Priority Ranking",
+    "subtitle": "Ranked by composite depletion risk score to guide recharge structures, subsidies, and water tankers",
+    "exportCsv": "Download CSV",
+    "totalBlocks": "Total Blocks",
+    "criticalBlocks": "Critical Risk",
+    "watchBlocks": "Watch List",
+    "safeBlocks": "Safe / Stable",
+    "insufficientBlocks": "Insufficient Data",
+    "colRank": "Rank",
+    "colDistrict": "District",
+    "colBlock": "Block / Taluka",
+    "colCurrent": "Current (m)",
+    "colPredicted": "Forecast (m)",
+    "colRange": "P10–P90 (m)",
+    "colShift": "YoY Change",
+    "colRisk": "Risk Class",
+    "colScore": "Stress Index",
+    "inspectOnMap": "View on Map"
+  },
+  "errors": {
+    "apiOfflineTitle": "Unable to reach WellCast API",
+    "apiOfflineBody": "Ensure the backend API is reachable and click Retry.",
+    "retry": "Retry Connection",
+    "insufficientTitle": "Insufficient Monitoring History",
+    "insufficientBody": "Fewer than 4 valid historical seasonal observations exist for this block in public CGWB/GSDA records. WellCast never fabricates missing measurements."
+  }
+}

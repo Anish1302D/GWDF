@@ -1,117 +1,82 @@
 # WellCast Data Sources & Attribution Registry
 
-> **Core Integrity Policy (Non-Negotiable):**
-> 1. **Zero fabricated data.** Every groundwater reading, rainfall record, extraction category, and boundary polygon used in WellCast must come from an authentic, verifiable public dataset.
-> 2. **Explicit gaps.** Where a block or season has missing observations, WellCast surfaces `"Insufficient Data"` rather than inventing numbers.
-> 3. **Flagged imputations.** Any short-gap interpolation or district-to-block fallback mapping is explicitly flagged (`is_imputed = true`, `imputation_method`) in both Parquet tables and API responses.
-> 4. **Verify before ship.** Confirm exact URLs, download timestamps, and licence terms for every row below during Phase 0–1 before launching Phase 3.
+> **Core Integrity Policy (Verified & Enforced):**
+> 1. **Zero fabricated data.** Every groundwater reading, rainfall value, and administrative boundary polygon in WellCast originates from an authentic, public scientific or government dataset listed below.
+> 2. **Explicit gaps.** Blocks with fewer than 4 historical seasonal observations are marked `"Insufficient Data"` rather than filled with invented numbers.
+> 3. **Flagged provenance.** `is_imputed` and `rainfall_source_level = "district_gridded"` are carried explicitly through Parquet tables and REST API JSON payloads.
 
 ---
 
-## 1. Locked Scope Metadata (Fill on Day 1 — Task `T0.7`)
+## 1. Locked Scope Metadata (`GATE-0` & `GATE-1` Verified)
 
-| Field | Value |
+| Field | Verified Value |
 |---|---|
-| **Target State (`D-01`)** | `Maharashtra` *(confirm on Day 1; switch only if multi-year coverage is inadequate)* |
-| **Forecast Granularity (`D-02`)** | `Block (Taluka)` *(fallback: District level, declared openly in UI & README)* |
-| **Temporal Coverage** | `<START_YEAR>` to `<END_YEAR>` *(target: >= 5 continuous years)* |
-| **Observation Cadence** | Semi-annual (`pre-monsoon` Apr–May, `post-monsoon` Nov) or quarterly |
-| **Total Blocks Covered** | `<COUNT>` *(of total `<TOTAL>` in state)* |
-| **Last Verified Date** | `<YYYY-MM-DD>` |
+| **Target State (`D-01`)** | `Maharashtra` (`MH`) |
+| **Forecast Granularity (`D-02`)** | `Block / Taluka (Sub-District)` |
+| **Temporal Coverage** | Groundwater: `2013-05-01` to `2025-11-01` (26 semi-annual seasons) · Precipitation: `2012-01-01` to `2025-12-01` |
+| **Observation Cadence** | Semi-annual (`pre-monsoon` Mar–May anchored to `YYYY-05-01`, `post-monsoon` Oct–Nov anchored to `YYYY-11-01`) |
+| **Total Blocks Covered** | `356` canonical blocks across all `36` districts of Maharashtra (`7,860` block-season rows from `756,542` raw well records) |
+| **Last Verified Date** | `2026-11-26` |
 
 ---
 
-## 2. Dataset Registry
+## 2. Verified Dataset Registry
 
-Complete all `<VERIFY_ON_DAY_1>` placeholders in Phase 0–1 when actual files are downloaded into `data/raw_local/`.
-
-### Dataset 1: Groundwater Monitoring Well Levels (Target Variable)
-| Attribute | Details |
+### Dataset 1A: Central Ground Water Board (CGWB) Manual Quarterly Groundwater Levels
+| Attribute | Verified Details |
 |---|---|
 | **Canonical Table** | `wellcast.water_level` |
-| **Primary Agency / Portal** | Central Ground Water Board (CGWB) / India Water Resources Information System (India-WRIS) / State GSDA (Maharashtra) |
-| **Candidate Portal URLs** | `https://indiawris.gov.in/wris/` · `https://cgwb.gov.in/` · `https://data.gov.in/` |
-| **Exact Downloaded URL** | `<FILL_ON_DAY_1>` |
-| **Download Date** | `<YYYY-MM-DD>` |
-| **File Format & Size** | `<CSV / XLSX, e.g., 14.2 MB>` |
-| **Licence / Terms of Use** | Government Open Data License – India (GODL) / Public Government Portal Terms *(verify exact page notice)* |
-| **Spatial Resolution** | Point (monitoring well lat/lon) -> aggregated via median/mean to Block (or District) |
-| **Temporal Coverage** | `<YYYY to YYYY>` (Pre-monsoon & Post-monsoon readings) |
-| **Key Raw Columns** | State, District, Block/Taluka, Station/Well ID, Date/Season, Water Level (`mbgl` — metres below ground level) |
-| **Known Caveats** | Seasonal well network changes over years; occasional negative/sentinel values (`-999`, `0.00` dry well codes) require explicit cleaning and removal |
+| **Agency / Portal** | Central Ground Water Board (CGWB), Ministry of Jal Shakti — via National Water Data Portal (`NWIC`) |
+| **Exact Downloaded URLs** | 1. `https://nwdp.nwic.gov.in/dataset/956add67-cba9-41a5-9d5c-96d73db44aef/resource/0e7180fa-5282-4df6-bead-8ca7a7557e74/download/gwl_manual_quarterly_cgwb_mh_1991_2020.csv`<br/>2. `https://nwdp.nwic.gov.in/dataset/956add67-cba9-41a5-9d5c-96d73db44aef/resource/073029e8-492d-416c-9857-3ad3e27c69a6/download/gwl_manual_quarterly_cgwb_mh_2021_2025.csv` |
+| **Download Date** | `2026-11-26` |
+| **File Format & Size** | CSV (`13.98 MB` + `1.75 MB` = `119,937` station readings) |
+| **Licence / Terms** | Government Open Data License – India (GODL) / NWIC Open Data (`Other (Open)`) |
+| **Spatial Resolution** | Monitoring well (`Latitude`, `Longitude`, `District`, `Tehsil`, `Block`) aggregated via **median** to Block |
 
-### Dataset 2: Monthly Rainfall & Departure from Normal (Primary Predictor)
-| Attribute | Details |
+### Dataset 1B: GSDA-Maharashtra Manual Groundwater Monitoring Network
+| Attribute | Verified Details |
+|---|---|
+| **Canonical Table** | `wellcast.water_level` (merged & deduplicated per well-season with CGWB) |
+| **Agency / Portal** | Groundwater Surveys and Development Agency (GSDA), Government of Maharashtra — via National Water Data Portal (`NWIC`) |
+| **Exact Downloaded URL** | `https://nwdp.nwic.gov.in/dataset/aab57261-b0d1-487b-8f9f-7ae2fb16637a/resource/bb185a88-c7c3-483f-b06e-784ce5322ff8/download/ground_water_level_manual_quarterly_maharashtra_1970_2025.csv` |
+| **Download Date** | `2026-11-26` |
+| **File Format & Size** | CSV (`91.49 MB`, extending through `2025`) |
+| **Licence / Terms** | Government Open Data License – India (GODL) / NWIC Open Data (`Other (Open)`) |
+| **Spatial Resolution** | Monitoring well (`Well ID`, `District Name`, `Block Name`, `Latitude`, `Longitude`) aggregated via **median** to Block |
+
+### Dataset 2: Monthly Agroclimatology Precipitation & Normals (Primary Predictor)
+| Attribute | Verified Details |
 |---|---|
 | **Canonical Table** | `wellcast.rainfall_monthly` |
-| **Primary Agency / Portal** | India Meteorological Department (IMD) / `data.gov.in` / India-WRIS Rainfall Module |
-| **Candidate Portal URLs** | `https://mausam.imd.gov.in/` · `https://data.gov.in/` · `https://indiawris.gov.in/wris/` |
-| **Exact Downloaded URL** | `<FILL_ON_DAY_1>` |
-| **Download Date** | `<YYYY-MM-DD>` |
-| **File Format & Size** | `<CSV / NetCDF / XLSX>` |
-| **Licence / Terms of Use** | Government Open Data License – India (GODL) / IMD Open Research Use *(verify exact dataset terms)* |
-| **Spatial Resolution** | District monthly (mapped to child blocks via district key) or Block/Gridded (`0.25° x 0.25°` spatially joined to block centroids) |
-| **Temporal Coverage** | `<YYYY-MM to YYYY-MM>` (must start >= 12 months earlier than first groundwater target for rolling windows) |
-| **Key Raw Columns** | State, District (or Block/Grid), Year, Month, Actual Rainfall (`mm`), Normal Rainfall (`mm`), Departure (`%`) |
-| **Known Caveats** | If district rainfall is assigned to blocks, set `rainfall_granularity = "district_mapped"` and disclose clearly in UI limitations note |
+| **Agency / Portal** | NASA Langley Research Center — Prediction Of Worldwide Energy Resources (`NASA POWER`) Agroclimatology Archive (`PRECTOTCORR` bias-corrected precipitation) |
+| **Exact API Endpoint** | `https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=PRECTOTCORR&community=AG&start=2012&end=2025&format=JSON` |
+| **Supplementary Reference** | IMD District Daily & Maharashtra SW Daily Rainfall via NWIC (`https://nwdp.nwic.gov.in/dataset/9380580f-9bf0-4708-9773-0cea3cbc595a`) |
+| **Download Date** | `2026-11-26` |
+| **File Format & Coverage** | `6,048` district-months (`2012-01` to `2025-12`) across all `36` Maharashtra districts -> mapped to `59,808` block-month rows |
+| **Licence / Terms** | Public Domain / Open Scientific Data (NASA Earth Science Division; credit: NASA POWER Project) |
+| **Climatological Normal** | Computed deterministically per district and calendar month over `2013–2024` (`12-year` baseline); tagged `rainfall_source_level = "district_gridded"` |
 
-### Dataset 3: Dynamic Ground Water Resources Extraction Stage (Context Feature & Calibration Cross-Check)
-| Attribute | Details |
+### Dataset 3:CGWB Official Block Extraction Stage Context
+| Attribute | Verified Details |
 |---|---|
-| **Canonical Table** | `wellcast.block` (`extraction_stage` column) |
-| **Primary Agency / Portal** | Central Ground Water Board (CGWB) — National Compilation on Dynamic Ground Water Resources of India / IN-GRES Portal |
-| **Candidate Portal URLs** | `https://ingres.iith.ac.in/` · `https://cgwb.gov.in/` |
-| **Exact Downloaded URL** | `<FILL_ON_DAY_1>` |
-| **Download Date** | `<YYYY-MM-DD>` |
-| **File Format & Size** | `<CSV / XLSX / PDF table extract>` |
-| **Licence / Terms of Use** | Public CGWB Assessment Report (cite assessment year, e.g., 2023/2024 Dynamic GW Resource Assessment) |
-| **Spatial Resolution** | Assessment Unit (Block / Taluka / Watershed) |
-| **Categories** | `Safe` (<70% extraction), `Semi-Critical` (70–90%), `Critical` (90–100%), `Over-Exploited` (>100%), `Saline` |
-| **Known Caveats** | Assessment unit names occasionally combine or split talukas; log all fuzzy/manual alias resolutions in `data/scripts/name_aliases.json` |
+| **Canonical Column** | `wellcast.block.extraction_stage` (`extraction_stage_code`) |
+| **Handling Applied** | Because IN-GRES (`ingres.iith.ac.in`) does not publish an unauthenticated bulk CSV export for Maharashtra's 356 talukas, WellCast strictly obeys its zero-fabrication policy by setting `extraction_stage = "Unknown"` (`extraction_stage_code = -1`) rather than inventing official government classifications, relying directly on observed CGWB/GSDA monitoring-well depths and multi-year drawdown trends |
 
 ### Dataset 4: Administrative Boundaries GeoJSON (Interactive Map Layer)
-| Attribute | Details |
+| Attribute | Verified Details |
 |---|---|
-| **Canonical Output** | `s3://<bucket>/api/geojson/<state>_blocks.geojson` |
-| **Primary Agency / Portal** | Public Open Administrative Boundaries (e.g., DataMeet Community Maps / Survey of India / Census Sub-district GeoJSON) |
-| **Candidate Portal URLs** | `https://github.com/datameet/maps` · `https://data.gov.in/` |
-| **Exact Downloaded URL** | `<FILL_ON_DAY_1>` |
-| **Download Date** | `<YYYY-MM-DD>` |
-| **Licence / Terms of Use** | `<e.g., Creative Commons Attribution-ShareAlike 2.5 India / GODL — verify exact repo LICENSE>` |
-| **Spatial Resolution** | Sub-district / Taluka / Block polygons (simplified to <1.5 MB via Douglas-Peucker for fast mobile Leaflet loading) |
-| **Known Caveats** | Administrative renamings in Maharashtra (e.g., `Aurangabad` -> `Chhatrapati Sambhajinagar`, `Osmanabad` -> `Dharashiv`, `Ahmadnagar` -> `Ahilyanagar`) and newly carved districts (`Palghar` from `Thane`) must be normalized in `name_aliases.json` |
+| **Canonical Output** | `frontend/public/geo/MH_blocks.geojson` & `data/processed_local/api/geojson/MH_blocks.geojson` |
+| **Source Repository** | Census of India 2011 / Local Government Directory (LGD) Maharashtra Sub-District Shapefile mirror (`datta07/INDIAN-SHAPEFILES`) |
+| **Exact Downloaded URL** | `https://raw.githubusercontent.com/datta07/INDIAN-SHAPEFILES/master/STATES/MAHARASHTRA/MAHARASHTRA_SUBDISTRICTS.geojson` |
+| **Download Date** | `2026-11-26` |
+| **Processing** | Removed 1 non-Maharashtra border sliver (`Vijayapura`), merged multi-part talukas into `356` canonical Maharashtra blocks across `36` districts, and simplified topology to `455.7 KB` for fast mobile rendering |
 
 ---
 
-## 3. Data Quality, Cleaning & Imputation Rules
+## 3. Data Quality & Cleaning Summary (`data/scripts/fetch_and_clean.py`)
 
-All cleaning transformations happen deterministically inside `data/scripts/fetch_and_clean.py`:
-
-| Check Category | Exact Rule | Action Taken | Flag Recorded |
-|---|---|---|---|
-| **Impossible Depth** | `depth_mbgl < 0` or `depth_mbgl > 300` or sentinel (`-999`, `9999`) | Drop reading before block aggregation | Log dropped row count in cleaning summary |
-| **Impossible Rainfall** | `rainfall_mm < 0` or `rainfall_mm > 3000` (single month extreme check) | Inspect & drop invalid sentinel rows | Log dropped row count |
-| **Well-to-Block Aggregation** | Multiple monitoring wells in one block & season | Compute **median** `depth_mbgl` (robust to outliers) + record `well_count` | `well_count` stored on every row |
-| **Single Missing Season** | Isolated 1-season gap between two valid seasons for the same block | Optional flag-only (preferred: leave null for target; only interpolate non-target lag if strictly bounded) | `is_imputed = true`, `imputation_method = "linear_prev_next"` (never impute `target_depth_next`!) |
-| **Sparse Blocks** | Block has `< 4` valid historical seasonal readings | Exclude from ML training & mark as `"Insufficient Data"` on map | `risk_class = "Insufficient Data"` |
-| **District-to-Block Rainfall** | Rainfall dataset available only at district granularity | Join on normalized `(state, district, month)` | `rainfall_source_level = "district"` |
-
----
-
-## 4. Fallback Sourcing Hierarchy (Day 1 Gate `GATE-0`)
-
-If any primary portal is unavailable or incomplete during Phase 0, apply these fallbacks in order and document the choice immediately:
-
-1. **Rainfall Fallback:** Block rainfall unavailable -> use **District monthly rainfall** mapped to all blocks in that district (`D-02` stays Block level; disclose clearly).
-2. **Groundwater Density Fallback:** Block-level well observations < 50% coverage -> aggregate all available wells per block; if still too sparse, switch `D-02` cleanly to **District level** and update UI labels (`"District Forecast"`).
-3. **Boundary Polygon Fallback:** Clean sub-district GeoJSON has unresolvable geometry/name mismatches -> render accurate **block/district centroid circle markers** on Leaflet with proportional risk styling until polygons align.
-4. **State Fallback:** Target state data cannot be verified by Day 1 8:00 PM IST -> switch `D-01` to another well-documented Indian state (e.g., Gujarat, Rajasthan, Punjab, or Tamil Nadu).
-
----
-
-## 5. Attribution Text for App Footer & Submission Docs
-
-Copy this template into the frontend "Data Sources & Limitations" modal and `Docs/idea-brief.md` after filling in verified details:
-
-> **Data Attribution:** Historical groundwater level observations are sourced from the Central Ground Water Board (CGWB) / India-WRIS (`<YEARS>`). Monthly rainfall records are sourced from the India Meteorological Department (IMD) / Open Government Data Platform (`data.gov.in`, `<YEARS>`). Block extraction classifications reference the CGWB Dynamic Ground Water Resources Assessment (`<YEAR>`). Administrative boundaries are derived from `<BOUNDARY_SOURCE>` under `<LICENCE>`.  
-> **Limitations:** Forecasts are statistical estimates derived from historical monitoring well medians and rainfall anomalies; they do not substitute for site-specific hydrogeological surveys or official government advisories. Blocks without sufficient monitoring history are explicitly marked as having insufficient data.
+- **Total raw monitoring-well records scanned:** `756,542`
+- **Valid `2013–2025` seasonal (`pre-monsoon` / `post-monsoon`) readings (`0 < depth_mbgl <= 250`):** `94,371`
+- **Block name + GPS point-in-polygon match rate:** `100.0%`
+- **Imputed target values:** `0` (`is_imputed = False` across 100% of rows)
+- **District renamings normalized (`name_aliases.json`):** `Aurangabad -> Chhatrapati Sambhajinagar`, `Osmanabad -> Dharashiv`, `Ahmadnagar -> Ahilyanagar`, `Bid -> Beed`, `Buldana -> Buldhana`, `Gondiya -> Gondia`, `Raigarh -> Raigad`, `Sindudurg -> Sindhudurg`.

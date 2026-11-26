@@ -1,0 +1,76 @@
+{
+  "appTitle": "वेलकास्ट (WellCast)",
+  "appSubtitle": "संकट आने से पहले भूजल दबाव देखें — महाराष्ट्र ब्लॉक पूर्वानुमान",
+  "farmerView": "किसान दृश्य",
+  "plannerView": "योजनाकार डैशबोर्ड",
+  "dataAndLimits": "डेटा स्रोत और सीमाएं",
+  "selectDistrict": "जिला",
+  "allDistricts": "सभी जिले",
+  "selectBlock": "ब्लॉक / तालुका",
+  "searchBlockPlaceholder": "ब्लॉक खोजें...",
+  "riskClasses": {
+    "Safe": "सुरक्षित (Safe)",
+    "Watch": "निगरानी (Watch)",
+    "Critical": "गंभीर (Critical)",
+    "Insufficient Data": "अपर्याप्त डेटा"
+  },
+  "forecastCard": {
+    "nextSeason": "पूर्वानुमान मौसम",
+    "predictedDepth": "अनुमानित गहराई",
+    "confidenceBand": "80% विश्वास सीमा (P10–P90)",
+    "currentDepth": "नवीनतम दर्ज गहराई",
+    "yoyChange": "वार्षिक बदलाव",
+    "wellsMonitored": "निगरानी कुएं",
+    "mbglUnit": "मीटर जमीन के नीचे",
+    "deeperWorseNote": "नोट: अधिक गहराई (m bgl) का अर्थ अधिक भूजल संकट है।"
+  },
+  "scenario": {
+    "title": "यदि मानसून वर्षा सामान्य से कम हो तो क्या होगा?",
+    "subtitle": "पूर्व-गणना किए गए परिदृश्य — सूखे के प्रभाव को तुरंत देखने के लिए स्लाइड करें",
+    "stops": {
+      "normal": "100% सामान्य वर्षा",
+      "minus10": "90% (-10% वर्षा)",
+      "minus20": "80% (-20% कम वर्षा)",
+      "minus30": "70% (-30% सूखा)"
+    }
+  },
+  "chart": {
+    "title": "ऐतिहासिक भूजल स्तर और आगामी मौसम का पूर्वानुमान",
+    "yAxisLabel": "जमीन से गहराई (m bgl — नीचे का अर्थ अधिक गहरा)",
+    "historical": "दर्ज जल स्तर (CGWB/GSDA)",
+    "predicted": "अनुमानित स्तर",
+    "confidence": "80% सीमा (P10–P90)",
+    "monsoonTitle": "ऐतिहासिक मानसून वर्षा बनाम सामान्य (मिमी)"
+  },
+  "advice": {
+    "title": "मौसमी फसल एवं जल सलाह",
+    "sourceNote": "जिला वर्षा डेटा और ब्लॉक निगरानी कुओं के ऐतिहासिक माध्य पर आधारित।"
+  },
+  "planner": {
+    "title": "जिला एवं ब्लॉक प्राथमिकता सूची",
+    "subtitle": "रिचार्ज संरचनाओं, सब्सिडी और टैंकर आवंटन के लिए जोखिम स्कोर के अनुसार क्रमबद्ध",
+    "exportCsv": "CSV डाउनलोड करें",
+    "totalBlocks": "कुल ब्लॉक",
+    "criticalBlocks": "गंभीर जोखिम",
+    "watchBlocks": "निगरानी सूची",
+    "safeBlocks": "सुरक्षित / स्थिर",
+    "insufficientBlocks": "अपर्याप्त डेटा",
+    "colRank": "क्रम",
+    "colDistrict": "जिला",
+    "colBlock": "ब्लॉक / तालुका",
+    "colCurrent": "वर्तमान (m)",
+    "colPredicted": "अनुमान (m)",
+    "colRange": "P10–P90 (m)",
+    "colShift": "वार्षिक अंतर",
+    "colRisk": "जोखिम श्रेणी",
+    "colScore": "तनाव सूचकांक",
+    "inspectOnMap": "मानचित्र पर देखें"
+  },
+  "errors": {
+    "apiOfflineTitle": "वेलकास्ट API से संपर्क नहीं हो सका",
+    "apiOfflineBody": "कृपया नेटवर्क जांचें और पुनः प्रयास करें।",
+    "retry": "पुनः प्रयास करें",
+    "insufficientTitle": "अपर्याप्त ऐतिहासिक निगरानी डेटा",
+    "insufficientBody": "सार्वजनिक CGWB/GSDA रिकॉर्ड में इस ब्लॉक के लिए 4 से कम मौसमी अवलोकन उपलब्ध हैं। वेलकास्ट कभी भी काल्पनिक डेटा नहीं बनाता।"
+  }
+}

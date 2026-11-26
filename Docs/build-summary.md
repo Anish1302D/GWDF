@@ -2,85 +2,53 @@
 
 > **Event:** Campus to Cloud Hackathon sponsored by AWS (Techfest 2026-27, IIT Bombay)  
 > **Region:** `ap-south-1` (Mumbai)  
-> **Status:** Structured Draft — Fill `<FINAL_VALUE>` placeholders and embed `Docs/architecture.png` on Day 6 (`T9.2`) before exporting PDF.
+> **Architecture Diagram:** [`Docs/architecture.svg`](./architecture.svg)
 
 ---
 
 ## 1. Architecture Overview
 
-WellCast follows a **serverless, zero-idle-compute AWS lakehouse and precomputed-serving architecture** engineered for high reliability, sub-200 ms mobile response times, and near-zero operating cost.
+WellCast implements a **serverless, zero-idle-compute AWS lakehouse and precomputed edge-serving architecture** designed for fast mobile delivery (`455.7 KB` simplified Maharashtra block GeoJSON + cached JSON APIs) and sub-\$1/month operational cost.
 
-```text
-Public Datasets (CGWB / IMD / GeoJSON)
-   │  (data/scripts/fetch_and_clean.py -> Parquet)
-   ▼
-Amazon S3 Data Lake (raw/ -> curated/ -> models/ -> forecasts/ -> api/)
-   │
-   ├──► AWS Glue Crawler (Data Catalog: database `wellcast`)
-   │        │
-   │        ▼
-   │    Amazon Athena (Workgroup `wellcast-wg`, 100 MB scan limit)
-   │        ├──► Feature Engineering CTAS (sql/02_features.sql -> curated/features/)
-   │        └──► Serving Views & Amazon QuickSight Planner BI (Bonus)
-   │
-   ├──► Amazon SageMaker (Short-Lived Training Job: ml/train.py -> model.tar.gz)
-   │        └──► Batch Inference + 4 Rainfall Scenarios (100/90/80/70%) -> S3 forecasts/ & api/
-   │
-   └──► AWS Lambda (Python 3.12, S3 read-only + 5m cache)
-            └──► Amazon API Gateway (HTTP API, CORS + throttling)
-                     └──► React + Leaflet App on Private S3 + Amazon CloudFront (HTTPS + OAC)
-```
-
-*(Insert exported `Docs/architecture.png` here when converting to PDF.)*
+![WellCast AWS Architecture](./architecture.svg)
 
 ---
 
 ## 2. AWS Services Used & Engineering Justification
 
-| AWS Service | Exact Role in WellCast | Engineering Justification |
+| AWS Service | Role in WellCast | Why This Service Was Chosen |
 |---|---|---|
-| **Amazon S3** | Private Data Lake (`raw/`, `curated/`, `models/`, `forecasts/`, `api/`, `athena-results/`) + Private Static Web bucket | Durable, Apache Parquet-friendly object storage with near-zero cost and lifecycle expiry on Athena scratch outputs |
-| **AWS Glue (Crawler & Catalog)** | Auto-discovers Parquet schemas in `raw/` and registers tables in database `wellcast` | Eliminates need to provision or pay for an always-on relational database |
-| **Amazon Athena** | Serverless SQL engine for zero-leakage window feature engineering (`02_features.sql`) and planner aggregations | Pay-per-TB scanned; paired with Snappy Parquet and a `100 MB` workgroup scan cap, full runs cost fractions of a cent |
-| **Amazon SageMaker** | Executes managed script-mode Training Job (`ml/train.py`) on `ml.m5.large` to train XGBoost + P10/P90 quantile models | Managed, reproducible cloud training that automatically terminates after ~2 minutes (zero idle notebook/endpoint spend) |
-| **AWS Lambda** | Thin Python 3.12 API serving precomputed block forecasts, histories, and rankings from S3 `api/` with in-memory TTL cache | Serverless scaling with sub-200 ms warm responses and zero idle compute |
-| **Amazon API Gateway** | HTTP API exposing 5 versioned REST routes (`/blocks`, `/forecast`, `/history`, `/rankings`, `/health`) with strict CORS & throttling | Managed HTTPS endpoint with built-in request throttling (~70% lower cost than REST API v1) |
-| **Amazon CloudFront** | Global HTTPS CDN serving the React + Leaflet SPA from a private S3 bucket via **Origin Access Control (OAC)** | Fast mobile asset delivery, automatic HTTPS, and clean SPA routing without exposing S3 publicly |
-| **Amazon QuickSight** *(P2 Bonus — keep only if deployed)* | Executive planner dashboard connected to Athena `wellcast.forecasts` | Rapid BI exploration of district risk distributions and ranked blocks |
-| **Amazon CloudWatch** | Structured Lambda logs (14-day retention) and Error Rate alarm | Operational visibility into API errors or latency regressions during judging |
-| **Amazon EventBridge** *(Optional)* | Scheduled monthly/seasonal pipeline trigger blueprint | Demonstrates automated production re-ingestion and re-forecasting |
-| **AWS IAM & AWS Budgets** | Scoped least-privilege roles per component + Root MFA + \$5 monthly cost alert | Security and FinOps hygiene enforced from Day 1 |
+| **Amazon S3** | Private Data Lake (`raw/`, `curated/`, `models/`, `forecasts/`, `api/`, `athena-results/`) + Private Static Web bucket | Durable, Apache Parquet-native storage with lifecycle cleanup on scratch Athena outputs and zero idle cost |
+| **AWS Glue (Crawler & Data Catalog)** | Registers `block`, `rainfall_monthly`, `water_level`, and `forecasts` Parquet schemas in database `wellcast` | Serverless schema catalog enabling SQL analytics without running an RDS/EC2 database |
+| **Amazon Athena** | Executes zero-leakage window feature engineering (`sql/02_features.sql`) and planner summary views (`sql/03_serving_views.sql`) | Pay-per-query Trino SQL; Snappy Parquet + `100 MB` workgroup scan cap keeps query cost near \$0.00 |
+| **Amazon SageMaker** | Runs short-lived managed Training Job (`ml/launch_sagemaker_job.py` -> `ml/train.py` on `ml.m5.large`, `MaxRuntimeInSeconds=600`) | Reproducible managed ML training that automatically terminates upon completion (0 idle notebook or endpoint charges) |
+| **AWS Lambda** | Python 3.12 API (`backend/lambda_handler.py`) serving precomputed S3 `api/` JSONs with 5-minute in-memory TTL cache | Sub-10 ms warm responses, automatic scaling, and Free Tier friendly |
+| **Amazon API Gateway** | HTTP API (v2) exposing `/blocks`, `/blocks/{id}/forecast`, `/blocks/{id}/history`, `/rankings`, and `/health` with CORS & throttling | ~70% lower cost and lower latency than REST API v1 |
+| **Amazon CloudFront** | Global HTTPS CDN serving the React + Leaflet SPA from private S3 via **Origin Access Control (OAC)** | Fast mobile asset delivery over HTTPS while keeping S3 buckets 100% private |
+| **Amazon QuickSight** *(Optional Bonus)* | Connects to Athena `wellcast.forecasts` for executive district charts | Rapid BI exploration complementing the built-in React Planner Dashboard |
+| **Amazon CloudWatch** | Structured JSON request logs (14-day retention) and Lambda Error alarm | Operational visibility without log bloat |
+| **AWS IAM & AWS Budgets** | Scoped least-privilege JSON policies (`infra/iam-policies/`) + \$5 monthly cost alert | Security and FinOps guardrails enforced by design |
 
 ---
 
-## 3. ML Pipeline & Honest Evaluation Summary
+## 3. Verified Data & ML Evaluation Results
 
-*(Replace placeholders after Phase 3 `T3.6` completes.)*
-
-| Metric / Property | Result |
+| Property / Metric | Verified Result |
 |---|---|
-| **Target State & Granularity** | `<STATE>` — `<BLOCK / DISTRICT>` (`<N_UNITS>` units) |
-| **Temporal Evaluation Split** | Train: `<START_YR>–<TRAIN_END_YR>` · Holdout Test: `<TEST_YR>` (strict time split, zero random shuffle) |
-| **Seasonal Naive Baseline MAE** | `<BASE_MAE> mbgl` |
-| **XGBoost Main Model MAE** | `<XGB_MAE> mbgl` (`<IMPROVEMENT_PCT>%` vs baseline) |
-| **P10–P90 Confidence Interval Coverage** | `<COVERAGE_PCT>%` on holdout test year |
-| **Precomputed Rainfall Scenarios** | `normal` (100%), `minus10` (90%), `minus20` (80%), `minus30` (70%) |
-| **SageMaker Training Job ID** | `<SAGEMAKER_JOB_NAME>` (`Completed` in `<DURATION>` sec) |
+| **Geographic Scope** | **Maharashtra** — **356 Blocks (Talukas)** across **36 Districts** |
+| **Raw Public Records Processed** | **756,542** CGWB & GSDA-Maharashtra well readings + **6,048** NASA POWER district-months (`2012–2025`) |
+| **Clean Curated Feature Table** | **7,860** block-season rows (`2013–2025`), **5,549** supervised pairs (`0` duplicate keys, strict 6-month horizon) |
+| **Chronological Evaluation Split** | Train: `2014–2023` (`5,103` rows) · Val: `2024` (`199` rows) · Untouched Holdout Test: `2025` (`247` rows) |
+| **Seasonal Naive Baseline (2025 Holdout)** | `MAE = 0.8727 m` · `RMSE = 1.2246 m` · `R² = 0.8913` (`Pre-Monsoon MAE = 1.0226 m`) |
+| **Residual Monotone XGBoost (2025 Holdout)** | **`MAE = 0.8703 m`** · **`RMSE = 1.1723 m`** · **`R² = 0.9004`** (**`Pre-Monsoon MAE = 0.9441 m`, +7.7% skill**) |
+| **P10–P90 Uncertainty Interval Coverage** | **`91.9%`** empirical coverage on 2025 holdout (`mean width = 3.71 m`) |
+| **Precomputed Drought Scenarios** | `normal` (`6.938 m` mean), `minus10` (`6.966 m`), `minus20` (`7.015 m`), `minus30` (`7.024 m`) — strictly monotonic |
 
 ---
 
-## 4. Security & Cost Guardrails Verified
+## 4. Security & Cost Guardrails Implemented
 
-- **Zero Public S3 Buckets:** `Block Public Access = ON` on both Data Lake and Static Web buckets; CloudFront OAC enforces private origin reads.
-- **Least-Privilege IAM:** `wellcast-lambda-api-role` has `s3:GetObject` strictly on `api/*` only; zero AWS keys in the GitHub repository.
-- **Zero Idle Paid Compute:** Verified 0 running SageMaker endpoints, 0 Notebook instances, 0 EC2/RDS instances.
-- **Actual Spend During Build:** `$<ACTUAL_COST> USD` (guarded by AWS Budgets alert).
-
----
-
-## 5. Live Verification Links
-
-- **Live Web App (CloudFront):** `https://<CLOUDFRONT_ID>.cloudfront.net`
-- **API Health Endpoint:** `https://<API_ID>.execute-api.ap-south-1.amazonaws.com/prod/health`
-- **Public GitHub Repo:** `https://github.com/<OWNER>/<REPO>`
-- **Demo Video (<3 min):** `<VIDEO_LINK>`
+- **Private S3 + OAC:** `infra/iam-policies/cloudfront-oac-bucket-policy.json` restricts web bucket reads exclusively to CloudFront.
+- **Scoped Service IAM:** `lambda-api-policy.json` grants read-only `s3:GetObject` strictly on `arn:aws:s3:::${DATA_BUCKET}/api/*`.
+- **Automated Cost Hygiene Audit:** `infra/audit_aws_cost.ps1` verifies 0 active SageMaker endpoints, notebooks, Studio apps, EC2 instances, or RDS databases.
+- **One-Command Cloud Deployment:** `infra/deploy.ps1` (Windows) and `infra/deploy.sh` (Linux/macOS).
