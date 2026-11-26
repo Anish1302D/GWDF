@@ -20,6 +20,7 @@ If you are starting a new build session (human developer or AI coding assistant)
 | 7 | [`ML_SPEC.md`](./ML_SPEC.md) | Feature catalog, time-split validation, Baseline/XGBoost/Quantiles, risk calibration, scenarios, SageMaker | Phase 2, Phase 3, Phase 4 |
 | 8 | [`API_AND_FRONTEND_SPEC.md`](./API_AND_FRONTEND_SPEC.md) | S3 static JSON contracts, 5 REST endpoints, 7-step React/Leaflet UI spec, EN/HI/MR i18n | Phase 4, Phase 5, Phase 6 |
 | 9 | [`AWS_INFRA_AND_SECURITY.md`](./AWS_INFRA_AND_SECURITY.md) | AWS setup, least-privilege IAM JSON policies, Budgets, CloudWatch, CloudFront OAC, QuickSight | Phase 0, Phase 1, Phase 5–8 |
+| 9B | [`AWS_CONSOLE_DEPLOYMENT_GUIDE.md`](./AWS_CONSOLE_DEPLOYMENT_GUIDE.md) | **Zero-CLI click-by-click AWS Web Console + Browser CloudShell deployment guide** | Deploying to AWS without local AWS CLI |
 | 10 | [`TESTING_AND_QA_CHECKLIST.md`](./TESTING_AND_QA_CHECKLIST.md) | Verification suites, hardening audit, submission checklist, video shot list, Demo Day Q&A | Phase 8, Phase 9, Phase 10, Demo Day |
 | 11 | [`idea-brief.md`](./idea-brief.md) | Hackathon submission Idea Brief (structured draft) | Phase 9 submission package |
 | 12 | [`build-summary.md`](./build-summary.md) | Hackathon submission AWS Build Summary (structured draft) | Phase 9 submission package |
