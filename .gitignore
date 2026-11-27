@@ -30,6 +30,7 @@ frontend/.env.local
 
 # Packaging Artifacts
 infra/build/
+infra/s3_data_bucket_upload/
 *.zip
 *.tar.gz
 

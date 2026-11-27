@@ -200,7 +200,13 @@ def _handle_forecast(block_id: str, query: dict[str, str]) -> dict[str, Any]:
     try:
         payload = _read_api_json(f"forecasts/{scenario}/{block_id_clean}.json")
     except ObjectNotFoundError:
-        return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
+        try:
+            bundle = _read_api_json(f"forecasts_bundle_{scenario}.json")
+        except ObjectNotFoundError:
+            return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
+        payload = bundle.get(block_id_clean)
+        if payload is None:
+            return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
 
     return _json_response(200, payload)
 
@@ -216,7 +222,13 @@ def _handle_history(block_id: str) -> dict[str, Any]:
     try:
         payload = _read_api_json(f"history/{block_id_clean}.json")
     except ObjectNotFoundError:
-        return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
+        try:
+            bundle = _read_api_json("history_bundle.json")
+        except ObjectNotFoundError:
+            return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
+        payload = bundle.get(block_id_clean)
+        if payload is None:
+            return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
 
     return _json_response(200, payload)
 
