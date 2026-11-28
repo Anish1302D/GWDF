@@ -10,7 +10,7 @@ export default function DataLimitationsModal({ open, onClose, healthMeta }) {
         <div className="modal-header">
           <div className="modal-title-row">
             <Info size={20} className="accent-icon" aria-hidden="true" />
-            <h2 id="limits-title">Data Sources, Methodology & Honest Caveats</h2>
+            <h2 id="limits-title">Pan-India Data Sources, AI Methodology &amp; Honest Caveats</h2>
           </div>
           <button type="button" className="icon-close-btn" onClick={onClose} aria-label="Close">
             <X size={18} />
@@ -18,54 +18,54 @@ export default function DataLimitationsModal({ open, onClose, healthMeta }) {
         </div>
 
         <div className="modal-content">
-          <h4>1. Verified Public Datasets Used</h4>
+          <h4>1. Authentic Nationwide Datasets Used</h4>
           <ul>
             <li>
-              <strong>Groundwater Monitoring Wells (Target):</strong> Central Ground Water Board (CGWB) Manual
-              Quarterly Readings (1991–2025) &amp; Groundwater Surveys and Development Agency (GSDA-Maharashtra,
-              1970–2025) via the Government of India National Water Data Portal (NWIC).
+              <strong>Pan-India Groundwater Monitoring Network (Target):</strong> Central Ground Water Board (CGWB)
+              Manual Quarterly Monitoring Wells across all Indian States &amp; UTs (1991–2025, 63 state datasets)
+              plus GSDA-Maharashtra (1970–2025) via the Government of India National Water Data Portal (NWIC).
             </li>
             <li>
-              <strong>Monthly Precipitation &amp; Normals (Predictor):</strong> NASA POWER Agroclimatology Gridded
-              Monthly Precipitation (<code>PRECTOTCORR</code>, 2012–2025) across all 36 Maharashtra districts,
-              benchmarked against 2013–2024 monthly normals.
+              <strong>All-India Monthly Precipitation Grid (Predictor):</strong> NASA POWER Agroclimatology (
+              <code>PRECTOTCORR</code>, 2012–2025) across 172 nationwide 1.5° hydro-climatic grid cells benchmarked
+              against 2013–2024 monthly normals.
             </li>
             <li>
-              <strong>Block Administrative Boundaries:</strong> Census of India / LGD Maharashtra Sub-District
-              (Taluka) GeoJSON (356 canonical blocks across 36 districts).
+              <strong>Administrative Boundaries:</strong> Census of India / Local Government Directory (LGD)
+              All-India State &amp; Sub-District (Block / Tehsil / Taluka / Mandal) GeoJSON boundaries (
+              <code>{healthMeta?.blocks_indexed?.toLocaleString() || "5,900+"}</code> units across{" "}
+              <code>{healthMeta?.states_indexed || 36}</code> States &amp; UTs).
             </li>
           </ul>
 
-          <h4>2. Forecasting &amp; Uncertainty Methodology</h4>
+          <h4>2. Forecasting &amp; Conformal Uncertainty Methodology</h4>
           <ul>
             <li>
-              Evaluated strictly on a <strong>chronological future holdout year</strong> (zero random time-series
-              splits) benchmarked against a Seasonal Naive baseline.
+              <strong>Dual Season-Specialist Monotone XGBoost + CQR:</strong> Separate drawdown and recharge
+              specialists trained with strictly causal expanding-window seasonal equilibrium features and rainfall
+              monotonicity constraints, evaluated on an untouched chronological holdout year.
             </li>
             <li>
-              Active Model Version: <code>{healthMeta?.model_version || "xgb-residual-v1"}</code> · Forecast Target:{" "}
-              <code>{healthMeta?.forecast_season || "Upcoming Season"}</code>.
+              Active Model: <code>{healthMeta?.model_version || "xgb-dual-specialist-cqr"}</code> · Forecasted Units:{" "}
+              <code>{healthMeta?.blocks_forecasted?.toLocaleString() || "All eligible blocks"}</code>.
             </li>
             <li>
-              <strong>P10–P90 Confidence Band:</strong> Shows an 80% uncertainty range rather than a single
-              deterministic point prediction.
+              <strong>State-Aware Aquifer Risk Thresholds:</strong> Combines state-calibrated hydrogeological depth
+              percentiles (accounting for shallow hard-rock peninsular vs deep Indo-Gangetic alluvial aquifers) with
+              universal drawdown velocity rules.
             </li>
           </ul>
 
           <h4>3. Limitations &amp; Responsible Use</h4>
           <ul>
             <li>
-              <strong>Zero Fabricated Data:</strong> Blocks with fewer than 4 historical seasonal observations are
-              explicitly marked <em>Insufficient Data</em> rather than filled with synthetic numbers.
+              <strong>Zero Fabricated Data:</strong> Sub-districts with fewer than 4 historical seasonal CGWB
+              observations (such as steep Himalayan terrain or unmonitored islands) are explicitly marked{" "}
+              <em>Insufficient Data</em> rather than filled with synthetic predictions.
             </li>
             <li>
-              <strong>Spatial Resolution:</strong> Block water levels represent the median of public monitoring wells
-              within each taluka; local borewell depths can vary due to fractured Deccan basalt geology and localized
-              pumping. Rainfall is mapped from district-level agroclimatology grids.
-            </li>
-            <li>
-              <strong>Decision Support Only:</strong> Forecasts complement — and do not replace — site-specific
-              hydrogeological surveys or official GSDA/CGWB advisories.
+              <strong>Decision Support Only:</strong> Block medians and crop/recharge calculators guide seasonal
+              planning and do not substitute for site-specific hydrogeological surveys or official CGWB advisories.
             </li>
           </ul>
         </div>

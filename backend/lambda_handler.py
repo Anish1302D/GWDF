@@ -1,15 +1,20 @@
-"""WellCast Serverless API Handler (AWS Lambda + Local Dev Compatible).
+"""WellCast Pan-India Serverless API Handler (AWS Lambda + Local Dev Compatible).
 
-Serves precomputed groundwater forecasts, confidence intervals, historical observations,
-and planner block rankings from Amazon S3 (`api/` prefix) with an in-memory TTL cache.
-When `USE_LOCAL_API=1` or `FORECAST_BUCKET` is unset, reads the identical relative keys
-from `LOCAL_API_DIR` (`data/processed_local/api`) for zero-cost local development and testing.
+Supports all 36 Indian States & Union Territories:
+  - `GET /health`
+  - `GET /states?scenario=normal`               (National state-by-state groundwater risk summary)
+  - `GET /blocks?state=MH&district=&scenario=`  (Per-state or ALL-India block index)
+  - `GET /blocks/nearest?lat=&lon=&scenario=`   (GPS "Locate My Farm" nearest block finder)
+  - `GET /blocks/{block_id}/forecast?scenario=` (Block forecast, CQR bounds, advice)
+  - `GET /blocks/{block_id}/history`            (Historical levels + monsoon rainfall)
+  - `GET /rankings?state=ALL|MH|PB|...&limit=`  (National or State top at-risk rankings)
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -22,6 +27,47 @@ logger.setLevel(logging.INFO)
 ALLOWED_SCENARIOS = ("normal", "minus10", "minus20", "minus30")
 BLOCK_ID_PATTERN = re.compile(r"^[A-Z]{2}-[A-Z0-9]{3}-[0-9]{3}$")
 
+STATE_NAME_TO_CODE: dict[str, str] = {
+    "ALL": "ALL",
+    "INDIA": "ALL",
+    "ANDAMAN AND NICOBAR ISLANDS": "AN",
+    "ANDHRA PRADESH": "AP",
+    "ARUNACHAL PRADESH": "AR",
+    "ASSAM": "AS",
+    "BIHAR": "BR",
+    "CHANDIGARH": "CH",
+    "CHHATTISGARH": "CG",
+    "DADRA AND NAGAR HAVELI AND DAMAN AND DIU": "DN",
+    "DELHI": "DL",
+    "GOA": "GA",
+    "GUJARAT": "GJ",
+    "HARYANA": "HR",
+    "HIMACHAL PRADESH": "HP",
+    "JAMMU AND KASHMIR": "JK",
+    "JHARKHAND": "JH",
+    "KARNATAKA": "KA",
+    "KERALA": "KL",
+    "LADAKH": "LA",
+    "LAKSHADWEEP": "LD",
+    "MADHYA PRADESH": "MP",
+    "MAHARASHTRA": "MH",
+    "MANIPUR": "MN",
+    "MEGHALAYA": "ML",
+    "MIZORAM": "MZ",
+    "NAGALAND": "NL",
+    "ODISHA": "OD",
+    "PUDUCHERRY": "PY",
+    "PUNJAB": "PB",
+    "RAJASTHAN": "RJ",
+    "SIKKIM": "SK",
+    "TAMIL NADU": "TN",
+    "TELANGANA": "TG",
+    "TRIPURA": "TR",
+    "UTTAR PRADESH": "UP",
+    "UTTARAKHAND": "UK",
+    "WEST BENGAL": "WB",
+}
+
 _CACHE: dict[str, tuple[float, Any]] = {}
 _S3_CLIENT = None
 
@@ -31,12 +77,11 @@ def _get_s3_client():
     if _S3_CLIENT is None:
         import boto3
 
-        _S3_CLIENT = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ap-south-1"))
+        _S3_CLIENT = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ap-southeast-2"))
     return _S3_CLIENT
 
 
 def clear_cache() -> None:
-    """Clear in-memory response cache (used in unit tests)."""
     _CACHE.clear()
 
 
@@ -60,11 +105,10 @@ def _json_response(status_code: int, payload: Any) -> dict[str, Any]:
 
 
 class ObjectNotFoundError(Exception):
-    """Raised when an API JSON object does not exist in S3 or local storage."""
+    pass
 
 
 def _read_api_json(rel_key: str) -> Any:
-    """Read and parse `api/<rel_key>` with TTL caching from S3 or local directory."""
     ttl = int(os.environ.get("CACHE_TTL_SECONDS", "300"))
     now = time.monotonic()
     cached = _CACHE.get(rel_key)
@@ -97,14 +141,12 @@ def _read_api_json(rel_key: str) -> Any:
 
 
 def _extract_request(event: dict[str, Any]) -> tuple[str, str, dict[str, str], dict[str, str]]:
-    """Normalize API Gateway HTTP API v2 and REST API v1 event shapes."""
     method = (
         event.get("requestContext", {}).get("http", {}).get("method")
         or event.get("httpMethod")
         or "GET"
     ).upper()
     raw_path = event.get("rawPath") or event.get("path") or "/"
-    # Strip stage prefix such as /prod if present
     for stage_prefix in ("/prod/", "/stage/", "/dev/"):
         if raw_path.startswith(stage_prefix):
             raw_path = "/" + raw_path[len(stage_prefix) :]
@@ -116,13 +158,22 @@ def _extract_request(event: dict[str, Any]) -> tuple[str, str, dict[str, str], d
     return method, raw_path.rstrip("/") or "/", path_params, query_params
 
 
-def _normalize_state_code(state_param: str | None) -> str:
+def _normalize_state_code(state_param: str | None, default: str = "MH") -> str:
     if not state_param:
-        return "MH"
+        return default
     val = state_param.strip().upper()
-    if val in ("MH", "MAHARASHTRA"):
-        return "MH"
-    return val[:2]
+    if len(val) == 2 and val.isalpha():
+        return val
+    return STATE_NAME_TO_CODE.get(val, val[:2])
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2.0 * r * math.asin(math.sqrt(a))
 
 
 def _handle_health() -> dict[str, Any]:
@@ -130,16 +181,36 @@ def _handle_health() -> dict[str, Any]:
         meta = _read_api_json("meta.json")
     except ObjectNotFoundError:
         meta = {}
-    payload = {
-        "status": "ok",
-        "service": "wellcast-api",
-        "region": os.environ.get("AWS_REGION", "ap-south-1"),
-        "model_version": meta.get("model_version", "uninitialized"),
-        "forecast_season": meta.get("forecast_season", "unknown"),
-        "blocks_indexed": meta.get("blocks_indexed", 0),
-        "generated_at": meta.get("generated_at"),
-    }
-    return _json_response(200, payload)
+    return _json_response(
+        200,
+        {
+            "status": "ok",
+            "service": "wellcast-api",
+            "scope": meta.get("scope", "All-India"),
+            "region": os.environ.get("AWS_REGION", "ap-southeast-2"),
+            "model_version": meta.get("model_version", "uninitialized"),
+            "forecast_season": meta.get("forecast_season", "unknown"),
+            "states_indexed": meta.get("states_indexed", 1),
+            "blocks_indexed": meta.get("blocks_indexed", 0),
+            "blocks_forecasted": meta.get("blocks_forecasted", 0),
+            "generated_at": meta.get("generated_at"),
+        },
+    )
+
+
+def _handle_states(query: dict[str, str]) -> dict[str, Any]:
+    scenario = query.get("scenario", "normal").strip().lower()
+    if scenario not in ALLOWED_SCENARIOS:
+        return _json_response(
+            400,
+            {"error": f"Invalid scenario '{scenario}'. Allowed values: {', '.join(ALLOWED_SCENARIOS)}"},
+        )
+    for cand in (f"states_summary_{scenario}.json", "states_summary.json"):
+        try:
+            return _json_response(200, _read_api_json(cand))
+        except ObjectNotFoundError:
+            continue
+    return _json_response(404, {"error": "States summary not found"})
 
 
 def _handle_blocks(query: dict[str, str]) -> dict[str, Any]:
@@ -150,20 +221,27 @@ def _handle_blocks(query: dict[str, str]) -> dict[str, Any]:
             {"error": f"Invalid scenario '{scenario}'. Allowed values: {', '.join(ALLOWED_SCENARIOS)}"},
         )
 
-    key = f"blocks_{scenario}.json" if scenario != "normal" else "blocks.json"
-    try:
-        doc = _read_api_json(key)
-    except ObjectNotFoundError:
-        doc = _read_api_json("blocks.json")
+    st_code = _normalize_state_code(query.get("state"), default="MH")
+    doc = None
+    candidates = [
+        f"blocks/{st_code}_{scenario}.json",
+        f"blocks/{st_code}_normal.json",
+        f"blocks_{scenario}.json" if scenario != "normal" else "blocks.json",
+        "blocks.json",
+    ]
+    for cand in candidates:
+        try:
+            doc = _read_api_json(cand)
+            break
+        except ObjectNotFoundError:
+            continue
+
+    if doc is None:
+        return _json_response(404, {"error": f"No blocks found for state '{st_code}'."})
 
     blocks = doc.get("blocks", [])
-    state_filter = query.get("state", "").strip().upper()
-    if state_filter and state_filter not in ("MH", "MAHARASHTRA"):
-        blocks = [
-            b
-            for b in blocks
-            if b.get("state", "").upper() == state_filter or b.get("block_id", "").startswith(state_filter + "-")
-        ]
+    if st_code != "ALL" and doc.get("state_code") in (None, "ALL"):
+        blocks = [b for b in blocks if b.get("block_id", "").startswith(st_code + "-")]
 
     district_filter = query.get("district", "").strip().lower()
     if district_filter:
@@ -172,12 +250,60 @@ def _handle_blocks(query: dict[str, str]) -> dict[str, Any]:
     return _json_response(
         200,
         {
-            "state": doc.get("state", "Maharashtra"),
+            "state_code": doc.get("state_code", st_code),
+            "state": doc.get("state", st_code),
             "granularity": doc.get("granularity", "block"),
             "scenario": scenario,
             "forecast_season": doc.get("forecast_season"),
             "count": len(blocks),
             "blocks": blocks,
+        },
+    )
+
+
+def _handle_nearest(query: dict[str, str]) -> dict[str, Any]:
+    try:
+        lat = float(query.get("lat", ""))
+        lon = float(query.get("lon", ""))
+    except ValueError:
+        return _json_response(400, {"error": "Provide numeric 'lat' and 'lon' query parameters."})
+
+    scenario = query.get("scenario", "normal").strip().lower()
+    if scenario not in ALLOWED_SCENARIOS:
+        scenario = "normal"
+
+    doc = None
+    for cand in (f"blocks/ALL_{scenario}.json", "blocks/ALL_normal.json", "blocks.json"):
+        try:
+            doc = _read_api_json(cand)
+            break
+        except ObjectNotFoundError:
+            continue
+    if not doc or not doc.get("blocks"):
+        return _json_response(404, {"error": "Block coordinate index unavailable."})
+
+    best_blk = None
+    best_dist = float("inf")
+    for b in doc["blocks"]:
+        blat, blon = b.get("lat"), b.get("lon")
+        if blat is None or blon is None:
+            continue
+        # Prefer blocks with active forecasts if within comparable distance
+        d = _haversine_km(lat, lon, float(blat), float(blon))
+        penalty = 25.0 if b.get("risk_class") == "Insufficient Data" else 0.0
+        if d + penalty < best_dist:
+            best_dist = d + penalty
+            best_blk = b
+
+    if best_blk is None:
+        return _json_response(404, {"error": "No nearby block found."})
+
+    actual_km = round(_haversine_km(lat, lon, float(best_blk["lat"]), float(best_blk["lon"])), 1)
+    return _json_response(
+        200,
+        {
+            "distance_km": actual_km,
+            "block": best_blk,
         },
     )
 
@@ -197,18 +323,20 @@ def _handle_forecast(block_id: str, query: dict[str, str]) -> dict[str, Any]:
             {"error": f"Invalid scenario '{scenario}'. Allowed values: {', '.join(ALLOWED_SCENARIOS)}"},
         )
 
+    st_code = block_id_clean[:2]
+    for bundle_key in (f"forecasts_bundle/{st_code}_{scenario}.json", f"forecasts_bundle_{scenario}.json"):
+        try:
+            bundle = _read_api_json(bundle_key)
+            if block_id_clean in bundle:
+                return _json_response(200, bundle[block_id_clean])
+        except ObjectNotFoundError:
+            pass
+
     try:
         payload = _read_api_json(f"forecasts/{scenario}/{block_id_clean}.json")
+        return _json_response(200, payload)
     except ObjectNotFoundError:
-        try:
-            bundle = _read_api_json(f"forecasts_bundle_{scenario}.json")
-        except ObjectNotFoundError:
-            return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
-        payload = bundle.get(block_id_clean)
-        if payload is None:
-            return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
-
-    return _json_response(200, payload)
+        return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
 
 
 def _handle_history(block_id: str) -> dict[str, Any]:
@@ -219,18 +347,20 @@ def _handle_history(block_id: str) -> dict[str, Any]:
             {"error": "Malformed block_id. Expected format like MH-PUN-012.", "block_id": block_id},
         )
 
+    st_code = block_id_clean[:2]
+    for bundle_key in (f"history_bundle/{st_code}.json", "history_bundle.json"):
+        try:
+            bundle = _read_api_json(bundle_key)
+            if block_id_clean in bundle:
+                return _json_response(200, bundle[block_id_clean])
+        except ObjectNotFoundError:
+            pass
+
     try:
         payload = _read_api_json(f"history/{block_id_clean}.json")
+        return _json_response(200, payload)
     except ObjectNotFoundError:
-        try:
-            bundle = _read_api_json("history_bundle.json")
-        except ObjectNotFoundError:
-            return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
-        payload = bundle.get(block_id_clean)
-        if payload is None:
-            return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
-
-    return _json_response(200, payload)
+        return _json_response(404, {"error": "Block not found", "block_id": block_id_clean})
 
 
 def _handle_rankings(query: dict[str, str]) -> dict[str, Any]:
@@ -241,22 +371,24 @@ def _handle_rankings(query: dict[str, str]) -> dict[str, Any]:
             {"error": f"Invalid scenario '{scenario}'. Allowed values: {', '.join(ALLOWED_SCENARIOS)}"},
         )
 
-    raw_limit = query.get("limit", "20").strip()
+    raw_limit = query.get("limit", "50").strip()
     try:
         limit = int(raw_limit)
     except ValueError:
-        return _json_response(400, {"error": "Parameter 'limit' must be an integer between 1 and 500."})
-    if limit < 1 or limit > 500:
-        return _json_response(400, {"error": "Parameter 'limit' must be between 1 and 500."})
+        return _json_response(400, {"error": "Parameter 'limit' must be an integer between 1 and 1000."})
+    if limit < 1 or limit > 1000:
+        return _json_response(400, {"error": "Parameter 'limit' must be between 1 and 1000."})
 
-    state_code = _normalize_state_code(query.get("state"))
-    try:
-        doc = _read_api_json(f"rankings/{state_code}_{scenario}.json")
-    except ObjectNotFoundError:
+    state_code = _normalize_state_code(query.get("state"), default="ALL")
+    doc = None
+    for cand in (f"rankings/{state_code}_{scenario}.json", f"rankings/{state_code}.json"):
         try:
-            doc = _read_api_json(f"rankings/{state_code}.json")
+            doc = _read_api_json(cand)
+            break
         except ObjectNotFoundError:
-            return _json_response(404, {"error": f"No rankings available for state '{state_code}'."})
+            continue
+    if doc is None:
+        return _json_response(404, {"error": f"No rankings available for state '{state_code}'."})
 
     rows = doc.get("rankings", [])
     district_filter = query.get("district", "").strip().lower()
@@ -272,7 +404,8 @@ def _handle_rankings(query: dict[str, str]) -> dict[str, Any]:
     return _json_response(
         200,
         {
-            "state": doc.get("state", "Maharashtra"),
+            "state_code": state_code,
+            "state": doc.get("state", "All India" if state_code == "ALL" else state_code),
             "scenario": scenario,
             "forecast_season": doc.get("forecast_season"),
             "summary": doc.get("summary", {}),
@@ -283,7 +416,6 @@ def _handle_rankings(query: dict[str, str]) -> dict[str, Any]:
 
 
 def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
-    """AWS Lambda entry point for API Gateway HTTP API / REST API."""
     t0 = time.perf_counter()
     method, path, path_params, query = _extract_request(event)
 
@@ -295,8 +427,12 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
             resp = _json_response(405, {"error": f"Method {method} not allowed."})
         elif path == "/health":
             resp = _handle_health()
+        elif path == "/states":
+            resp = _handle_states(query)
         elif path == "/blocks":
             resp = _handle_blocks(query)
+        elif path == "/blocks/nearest":
+            resp = _handle_nearest(query)
         elif path == "/rankings":
             resp = _handle_rankings(query)
         else:
@@ -316,13 +452,6 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
 
     latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
     logger.info(
-        json.dumps(
-            {
-                "method": method,
-                "path": path,
-                "status": resp["statusCode"],
-                "latency_ms": latency_ms,
-            }
-        )
+        json.dumps({"method": method, "path": path, "status": resp["statusCode"], "latency_ms": latency_ms})
     )
     return resp

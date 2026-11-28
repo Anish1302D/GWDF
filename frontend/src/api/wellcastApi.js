@@ -7,7 +7,7 @@ async function fetchJson(url, useCache = true) {
     return memCache.get(url);
   }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
+  const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const res = await fetch(url, {
       method: "GET",
@@ -44,26 +44,43 @@ export function fetchHealth() {
   return fetchJson(`${API_BASE}/health`, false);
 }
 
-export function fetchBlocks(scenario = "normal") {
-  return fetchJson(`${API_BASE}/blocks?state=MH&scenario=${encodeURIComponent(scenario)}`);
-}
+  export function fetchStatesSummary(scenario = "normal") {
+    return fetchJson(`${API_BASE}/states?scenario=${encodeURIComponent(scenario)}`);
+  }
 
-export function fetchForecast(blockId, scenario = "normal") {
-  return fetchJson(
-    `${API_BASE}/blocks/${encodeURIComponent(blockId)}/forecast?scenario=${encodeURIComponent(scenario)}`
-  );
-}
+  export function fetchBlocks(stateCode = "MH", scenario = "normal") {
+    return fetchJson(
+      `${API_BASE}/blocks?state=${encodeURIComponent(stateCode)}&scenario=${encodeURIComponent(scenario)}`
+    );
+  }
 
-export function fetchHistory(blockId) {
-  return fetchJson(`${API_BASE}/blocks/${encodeURIComponent(blockId)}/history`);
-}
+  export function fetchNearestBlock(lat, lon, scenario = "normal") {
+    return fetchJson(
+      `${API_BASE}/blocks/nearest?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&scenario=${encodeURIComponent(scenario)}`,
+      false
+    );
+  }
 
-export function fetchRankings(scenario = "normal", limit = 400) {
-  return fetchJson(
-    `${API_BASE}/rankings?state=MH&scenario=${encodeURIComponent(scenario)}&limit=${limit}`
-  );
-}
+  export function fetchForecast(blockId, scenario = "normal") {
+    return fetchJson(
+      `${API_BASE}/blocks/${encodeURIComponent(blockId)}/forecast?scenario=${encodeURIComponent(scenario)}`
+    );
+  }
 
-export function fetchGeoJson() {
-  return fetchJson(`/geo/MH_blocks.geojson`, true);
-}
+  export function fetchHistory(blockId) {
+    return fetchJson(`${API_BASE}/blocks/${encodeURIComponent(blockId)}/history`);
+  }
+
+    export function fetchRankings(stateCode = "ALL", scenario = "normal", limit = 400) {
+      return fetchJson(
+          `${API_BASE}/rankings?state=${encodeURIComponent(stateCode)}&scenario=${encodeURIComponent(scenario)}&limit=${limit}`
+      );
+    }
+
+      export function fetchIndiaStatesGeoJson() {
+        return fetchJson(`/geo/INDIA_states.geojson`, true);
+      }
+
+      export function fetchStateBlocksGeoJson(stateCode) {
+        return fetchJson(`/geo/states/${encodeURIComponent(stateCode)}_blocks.geojson`, true);
+      }

@@ -71,6 +71,7 @@ def main() -> None:
     wl_enriched AS (
       SELECT
         w.block_id,
+        b.state_code,
         b.district,
         b.lat,
         b.lon,
@@ -116,8 +117,8 @@ def main() -> None:
         LAG(e.block_curr_season_hist_mean, 1) OVER (
           PARTITION BY e.block_id ORDER BY e.obs_date
         ) AS block_target_season_hist_mean,
-        AVG(e.depth_mbgl) OVER (PARTITION BY e.district, e.obs_date) AS district_curr_depth_mean,
-        AVG(e.prev_depth_mbgl) OVER (PARTITION BY e.district, e.obs_date) AS district_prev_depth_mean
+        AVG(e.depth_mbgl) OVER (PARTITION BY e.state_code, e.district, e.obs_date) AS district_curr_depth_mean,
+        AVG(e.prev_depth_mbgl) OVER (PARTITION BY e.state_code, e.district, e.obs_date) AS district_prev_depth_mean
       FROM wl_enriched e
     )
     SELECT

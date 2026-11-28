@@ -1,13 +1,15 @@
-"""Phase 4 v2 Batch Forecast & Precomputed Scenario Engine + Static API JSON Exporter.
+"""Pan-India Phase 4 Batch Forecast, Drought Scenario Engine & State-Sharded API Exporter.
 
 Scores next-season groundwater depth (`mbgl`), CQR-calibrated P10-P90 uncertainty bounds,
-and calibrated risk classes across 4 rainfall scenarios (`normal` 100%, `minus10` 90%,
-`minus20` 80%, `minus30` 70%) using the Dual Season-Specialist + Global Monotone XGBoost ensemble.
+and state-calibrated risk classes across all 36 Indian States & Union Territories and
+4 rainfall scenarios (`normal` 100%, `minus10` 90%, `minus20` 80%, `minus30` 70%).
+Exports fast state-sharded JSON bundles (<250 KB/state) under `data/processed_local/api/`.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +25,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from ml.evaluate import FEATURE_COLUMNS, enforce_prediction_bounds  # noqa: E402
-from ml.risk_rules import classify_risk, get_advice  # noqa: E402
+from ml.risk_rules import (  # noqa: E402
+    calibrate_state_thresholds_from_data,
+    classify_risk,
+    get_advice,
+)
 from ml.train import predict_blended_delta  # noqa: E402
 
 SCENARIO_CONFIG: list[tuple[str, int, float]] = [
@@ -70,7 +76,6 @@ def _build_scenario_features(infer_df: pd.DataFrame, mult: float) -> pd.DataFram
     r12_norm = df_s["rain_12m_normal_mm"].fillna(df_s["rain_12m_mm"]).clip(lower=1.0)
     r24_norm = df_s["rain_24m_normal_mm"].fillna(df_s["rain_24m_mm"]).clip(lower=1.0)
 
-    # Perturb full annual/seasonal monsoon recharge budget by multiplier `mult`
     prior_12m = (df_s["rain_24m_mm"] - df_s["rain_12m_mm"]).clip(lower=0.0)
 
     df_s["rain_3m_mm"] = (mult * r3_norm).round(2)
@@ -80,9 +85,7 @@ def _build_scenario_features(infer_df: pd.DataFrame, mult: float) -> pd.DataFram
 
     df_s["rain_departure_6m_pct"] = round((mult - 1.0) * 100.0, 2)
     df_s["rain_departure_12m_pct"] = round((mult - 1.0) * 100.0, 2)
-    df_s["rain_departure_24m_pct"] = (
-        ((df_s["rain_24m_mm"] - r24_norm) / r24_norm) * 100.0
-    ).round(2)
+    df_s["rain_departure_24m_pct"] = (((df_s["rain_24m_mm"] - r24_norm) / r24_norm) * 100.0).round(2)
 
     X = df_s[FEATURE_COLUMNS].copy()
     for c in FEATURE_COLUMNS:
@@ -97,13 +100,28 @@ def main() -> None:
     forecasts_parquet_dir = processed / "forecasts"
     forecasts_parquet_dir.mkdir(parents=True, exist_ok=True)
 
+    # Clean old static api_dir (except geojson if present) to avoid stale single-state files
+    if api_dir.exists():
+        for child in api_dir.iterdir():
+            if child.name == "geojson":
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+
+    for sub in ("blocks", "forecasts_bundle", "history_bundle", "rankings"):
+        (api_dir / sub).mkdir(parents=True, exist_ok=True)
+
     blocks_df = pd.read_parquet(processed / "raw" / "block" / "blocks.parquet")
     wl_df = pd.read_parquet(processed / "raw" / "water_level" / "water_level.parquet")
     rain_df = pd.read_parquet(processed / "raw" / "rainfall_monthly" / "rainfall_monthly.parquet")
     infer_df = pd.read_parquet(processed / "curated" / "ml_inference" / "latest_features.parquet")
 
     m_p50, m_pre, m_post, m_p10, m_p90, metrics = _load_models(artifacts_dir)
-    thresholds = metrics["calibrated_risk_thresholds"]
+    global_thresholds = metrics["calibrated_risk_thresholds"]
+    state_thresholds = calibrate_state_thresholds_from_data(wl_df)
+
     model_version = metrics["model_version"]
     cqr_offset = float(metrics.get("cqr_offset_mbgl", 0.0))
     blend_weights = metrics.get("season_blend_weights")
@@ -113,15 +131,34 @@ def main() -> None:
     is_residual = metrics.get("target_formulation") == "residual_over_seasonal_naive"
     generated_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # Precompute normal monsoon rainfall (Jun-Sep) per block for Crop & Recharge Advisors
+    rain_df["month_dt"] = pd.to_datetime(rain_df["month"])
+    rain_df["yr"] = rain_df["month_dt"].dt.year
+    rain_df["mo"] = rain_df["month_dt"].dt.month
+    monsoon_df = (
+        rain_df[rain_df["mo"].isin([6, 7, 8, 9])]
+        .groupby(["block_id", "yr"], as_index=False)
+        .agg(rainfall_mm=("rainfall_mm", "sum"), normal_mm=("normal_rainfall_mm", "sum"))
+        .sort_values(["block_id", "yr"])
+    )
+    monsoon_df["departure_pct"] = np.where(
+        monsoon_df["normal_mm"] > 1.0,
+        ((monsoon_df["rainfall_mm"] - monsoon_df["normal_mm"]) / monsoon_df["normal_mm"]) * 100.0,
+        0.0,
+    ).round(1)
+    normal_monsoon_lookup: dict[str, float] = (
+        monsoon_df.groupby("block_id")["normal_mm"].median().round(1).to_dict()
+    )
+
     infer_df["obs_date_str"] = infer_df["obs_date"].astype(str)
     infer_df["next_season_label"] = [
         _next_season_label(d, s) for d, s in zip(infer_df["obs_date_str"], infer_df["season"])
     ]
     dominant_forecast_season = str(infer_df["next_season_label"].mode().iloc[0])
 
+    # Eligible blocks across India: >= 4 seasonal observations and latest obs >= 2021
     infer_df["latest_year"] = infer_df["obs_date_str"].str.slice(0, 4).astype(int)
-    eligible_mask = (infer_df["block_total_obs"] >= 4) & (infer_df["latest_year"] >= 2022)
-    eligible_df = infer_df[eligible_mask].copy().reset_index(drop=True)
+    eligible_df = infer_df[(infer_df["block_total_obs"] >= 4) & (infer_df["latest_year"] >= 2021)].copy().reset_index(drop=True)
 
     scenario_predictions: dict[str, dict[str, dict[str, Any]]] = {}
     s_codes = eligible_df["season_code"].to_numpy()
@@ -131,8 +168,7 @@ def main() -> None:
         X_s = _build_scenario_features(eligible_df, mult)
         if use_fallback:
             trend = np.clip(eligible_df["depth_trend_5yr"].fillna(0.0).to_numpy(dtype=float), -2.0, 2.0)
-            drought_bump = (1.0 - mult) * 3.5
-            p50_raw = base_anchor + 0.5 * trend + drought_bump
+            p50_raw = base_anchor + 0.5 * trend + (1.0 - mult) * 3.5
             p10_raw = p50_raw + res_q10
             p90_raw = p50_raw + res_q90
         else:
@@ -148,12 +184,12 @@ def main() -> None:
         p50, low, high = enforce_prediction_bounds(p50_raw, p10_raw, p90_raw)
         scen_map: dict[str, dict[str, Any]] = {}
         for idx, row in enumerate(eligible_df.itertuples(index=False)):
-            ref_same_season = (
-                float(row.prev_depth_mbgl) if pd.notna(row.prev_depth_mbgl) else float(row.depth_mbgl)
-            )
-            yoy_delta = round(float(p50[idx]) - ref_same_season, 2)
+            st_c = str(row.block_id)[:2]
+            t_state = state_thresholds.get(st_c, global_thresholds)
+            ref_same = float(row.prev_depth_mbgl) if pd.notna(row.prev_depth_mbgl) else float(row.depth_mbgl)
+            yoy_delta = round(float(p50[idx]) - ref_same, 2)
             trend_5 = float(row.depth_trend_5yr) if pd.notna(row.depth_trend_5yr) else 0.0
-            r_class, r_score = classify_risk(float(p50[idx]), yoy_delta, trend_5, thresholds)
+            r_class, r_score = classify_risk(float(p50[idx]), yoy_delta, trend_5, t_state)
             scen_map[row.block_id] = {
                 "scenario": scen_key,
                 "rainfall_pct_of_normal": rain_pct,
@@ -179,84 +215,106 @@ def main() -> None:
         f"Scenario monotonicity violated! Mean predicted depths: {means}"
     )
 
-    for scen_key, _, _ in SCENARIO_CONFIG:
-        (api_dir / "forecasts" / scen_key).mkdir(parents=True, exist_ok=True)
-    (api_dir / "history").mkdir(parents=True, exist_ok=True)
-    (api_dir / "rankings").mkdir(parents=True, exist_ok=True)
-
     parquet_rows: list[dict[str, Any]] = []
+    blocks_by_state = {st: grp for st, grp in blocks_df.groupby("state_code")}
 
     for scen_key, rain_pct, _ in SCENARIO_CONFIG:
-        blocks_list: list[dict[str, Any]] = []
-        rankings_list: list[dict[str, Any]] = []
-        summary_counts = {
+        all_blocks_compact: list[dict[str, Any]] = []
+        all_rankings: list[dict[str, Any]] = []
+        national_summary = {
             "total_blocks": int(len(blocks_df)),
             "critical": 0,
             "watch": 0,
             "safe": 0,
             "insufficient_data": 0,
         }
+        states_summary_rows: list[dict[str, Any]] = []
 
-        for b in blocks_df.itertuples(index=False):
-            pred_info = scenario_predictions[scen_key].get(b.block_id)
-            if pred_info is None:
-                summary_counts["insufficient_data"] += 1
-                payload = {
-                    "block_id": b.block_id,
-                    "state": b.state,
-                    "district": b.district,
-                    "block_name": b.block_name,
-                    "granularity": b.granularity,
-                    "scenario": scen_key,
-                    "rainfall_pct_of_normal": rain_pct,
-                    "forecast_season": dominant_forecast_season,
-                    "current_obs_date": None,
-                    "current_depth_mbgl": None,
-                    "predicted_depth_mbgl": None,
-                    "lower_bound": None,
-                    "upper_bound": None,
-                    "predicted_yoy_change_mbgl": None,
-                    "depth_trend_5yr": None,
-                    "extraction_stage": b.extraction_stage,
-                    "risk_class": "Insufficient Data",
-                    "risk_score": 0.0,
-                    "well_count": 0,
-                    "is_imputed_history": False,
-                    "rainfall_source_level": "district_gridded",
-                    "advice": get_advice("Insufficient Data"),
-                    "available_scenarios": [s[0] for s in SCENARIO_CONFIG],
-                }
-            else:
-                rc = pred_info["risk_class"]
-                summary_counts[rc.lower()] += 1
-                payload = {
-                    "block_id": b.block_id,
-                    "state": b.state,
-                    "district": b.district,
-                    "block_name": b.block_name,
-                    "granularity": b.granularity,
-                    "scenario": scen_key,
-                    "rainfall_pct_of_normal": rain_pct,
-                    "forecast_season": pred_info["forecast_season"],
-                    "current_obs_date": pred_info["current_obs_date"],
-                    "current_depth_mbgl": pred_info["current_depth_mbgl"],
-                    "predicted_depth_mbgl": pred_info["predicted_depth_mbgl"],
-                    "lower_bound": pred_info["lower_bound"],
-                    "upper_bound": pred_info["upper_bound"],
-                    "predicted_yoy_change_mbgl": pred_info["predicted_yoy_change_mbgl"],
-                    "depth_trend_5yr": pred_info["depth_trend_5yr"],
-                    "extraction_stage": b.extraction_stage,
-                    "risk_class": rc,
-                    "risk_score": pred_info["risk_score"],
-                    "well_count": pred_info["well_count"],
-                    "is_imputed_history": False,
-                    "rainfall_source_level": "district_gridded",
-                    "advice": get_advice(rc),
-                    "available_scenarios": [s[0] for s in SCENARIO_CONFIG],
-                }
-                rankings_list.append(
-                    {
+        for st_code, st_df in sorted(blocks_by_state.items()):
+            state_name = str(st_df["state"].iloc[0])
+            st_forecasts_bundle: dict[str, dict[str, Any]] = {}
+            st_blocks_list: list[dict[str, Any]] = []
+            st_rankings: list[dict[str, Any]] = []
+            st_counts = {
+                "total_blocks": int(len(st_df)),
+                "critical": 0,
+                "watch": 0,
+                "safe": 0,
+                "insufficient_data": 0,
+            }
+            st_depths: list[float] = []
+            st_scores: list[float] = []
+
+            for b in st_df.itertuples(index=False):
+                pred_info = scenario_predictions[scen_key].get(b.block_id)
+                norm_monsoon = float(normal_monsoon_lookup.get(b.block_id, 750.0))
+                if pred_info is None:
+                    st_counts["insufficient_data"] += 1
+                    national_summary["insufficient_data"] += 1
+                    payload = {
                         "block_id": b.block_id,
+                        "state_code": st_code,
+                        "state": b.state,
+                        "district": b.district,
+                        "block_name": b.block_name,
+                        "granularity": b.granularity,
+                        "scenario": scen_key,
+                        "rainfall_pct_of_normal": rain_pct,
+                        "forecast_season": dominant_forecast_season,
+                        "current_obs_date": None,
+                        "current_depth_mbgl": None,
+                        "predicted_depth_mbgl": None,
+                        "lower_bound": None,
+                        "upper_bound": None,
+                        "predicted_yoy_change_mbgl": None,
+                        "depth_trend_5yr": None,
+                        "normal_monsoon_mm": norm_monsoon,
+                        "extraction_stage": b.extraction_stage,
+                        "risk_class": "Insufficient Data",
+                        "risk_score": 0.0,
+                        "well_count": 0,
+                        "is_imputed_history": False,
+                        "rainfall_source_level": "nasa_power_gridded",
+                        "advice": get_advice("Insufficient Data"),
+                        "available_scenarios": [s[0] for s in SCENARIO_CONFIG],
+                    }
+                else:
+                    rc = pred_info["risk_class"]
+                    st_counts[rc.lower()] += 1
+                    national_summary[rc.lower()] += 1
+                    st_depths.append(pred_info["predicted_depth_mbgl"])
+                    st_scores.append(pred_info["risk_score"])
+                    payload = {
+                        "block_id": b.block_id,
+                        "state_code": st_code,
+                        "state": b.state,
+                        "district": b.district,
+                        "block_name": b.block_name,
+                        "granularity": b.granularity,
+                        "scenario": scen_key,
+                        "rainfall_pct_of_normal": rain_pct,
+                        "forecast_season": pred_info["forecast_season"],
+                        "current_obs_date": pred_info["current_obs_date"],
+                        "current_depth_mbgl": pred_info["current_depth_mbgl"],
+                        "predicted_depth_mbgl": pred_info["predicted_depth_mbgl"],
+                        "lower_bound": pred_info["lower_bound"],
+                        "upper_bound": pred_info["upper_bound"],
+                        "predicted_yoy_change_mbgl": pred_info["predicted_yoy_change_mbgl"],
+                        "depth_trend_5yr": pred_info["depth_trend_5yr"],
+                        "normal_monsoon_mm": norm_monsoon,
+                        "extraction_stage": b.extraction_stage,
+                        "risk_class": rc,
+                        "risk_score": pred_info["risk_score"],
+                        "well_count": pred_info["well_count"],
+                        "is_imputed_history": False,
+                        "rainfall_source_level": "nasa_power_gridded",
+                        "advice": get_advice(rc),
+                        "available_scenarios": [s[0] for s in SCENARIO_CONFIG],
+                    }
+                    rank_entry = {
+                        "block_id": b.block_id,
+                        "state_code": st_code,
+                        "state": b.state,
                         "district": b.district,
                         "block_name": b.block_name,
                         "extraction_stage": b.extraction_stage,
@@ -265,24 +323,23 @@ def main() -> None:
                         "lower_bound": pred_info["lower_bound"],
                         "upper_bound": pred_info["upper_bound"],
                         "predicted_yoy_change_mbgl": pred_info["predicted_yoy_change_mbgl"],
+                        "depth_trend_5yr": pred_info["depth_trend_5yr"],
                         "well_count": pred_info["well_count"],
                         "risk_class": rc,
                         "risk_score": pred_info["risk_score"],
                     }
-                )
+                    st_rankings.append(rank_entry)
+                    all_rankings.append(dict(rank_entry))
 
-            (api_dir / "forecasts" / scen_key / f"{b.block_id}.json").write_text(
-                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
-            )
-            blocks_list.append(
-                {
+                st_forecasts_bundle[b.block_id] = payload
+                compact_blk = {
                     "block_id": b.block_id,
+                    "state_code": st_code,
                     "state": b.state,
                     "district": b.district,
                     "block_name": b.block_name,
                     "lat": float(b.lat),
                     "lon": float(b.lon),
-                    "extraction_stage": b.extraction_stage,
                     "current_depth_mbgl": payload["current_depth_mbgl"],
                     "predicted_depth_mbgl": payload["predicted_depth_mbgl"],
                     "lower_bound": payload["lower_bound"],
@@ -291,111 +348,204 @@ def main() -> None:
                     "risk_class": payload["risk_class"],
                     "risk_score": payload["risk_score"],
                 }
+                st_blocks_list.append(compact_blk)
+                all_blocks_compact.append(compact_blk)
+
+                parquet_rows.append(
+                    {
+                        "block_id": b.block_id,
+                        "state_code": st_code,
+                        "state": b.state,
+                        "district": b.district,
+                        "block_name": b.block_name,
+                        "scenario": scen_key,
+                        "rainfall_pct_of_normal": rain_pct,
+                        "forecast_season": payload["forecast_season"],
+                        "current_depth_mbgl": payload["current_depth_mbgl"],
+                        "predicted_depth_mbgl": payload["predicted_depth_mbgl"],
+                        "lower_bound": payload["lower_bound"],
+                        "upper_bound": payload["upper_bound"],
+                        "predicted_yoy_change_mbgl": payload["predicted_yoy_change_mbgl"],
+                        "risk_class": payload["risk_class"],
+                        "risk_score": payload["risk_score"],
+                        "model_version": model_version,
+                        "generated_at": pd.Timestamp.now(tz="UTC"),
+                    }
+                )
+
+            # Save state forecast bundle & state block list
+            (api_dir / "forecasts_bundle" / f"{st_code}_{scen_key}.json").write_text(
+                json.dumps(st_forecasts_bundle, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
             )
-            parquet_rows.append(
+            st_blocks_doc = {
+                "state_code": st_code,
+                "state": state_name,
+                "granularity": "block",
+                "scenario": scen_key,
+                "forecast_season": dominant_forecast_season,
+                "count": len(st_blocks_list),
+                "blocks": st_blocks_list,
+            }
+            (api_dir / "blocks" / f"{st_code}_{scen_key}.json").write_text(
+                json.dumps(st_blocks_doc, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            if st_code == "MH" and scen_key == "normal":
+                (api_dir / "blocks.json").write_text(
+                    json.dumps(st_blocks_doc, ensure_ascii=False, separators=(",", ":")),
+                    encoding="utf-8",
+                )
+
+            st_rankings.sort(key=lambda r: (r["risk_score"], r["predicted_depth_mbgl"] or 0.0), reverse=True)
+            for idx, item in enumerate(st_rankings, start=1):
+                item["rank"] = idx
+            st_rank_doc = {
+                "state_code": st_code,
+                "state": state_name,
+                "scenario": scen_key,
+                "forecast_season": dominant_forecast_season,
+                "summary": st_counts,
+                "rankings": st_rankings,
+            }
+            (api_dir / "rankings" / f"{st_code}_{scen_key}.json").write_text(
+                json.dumps(st_rank_doc, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+
+            forecasted_n = st_counts["critical"] + st_counts["watch"] + st_counts["safe"]
+            if forecasted_n == 0:
+                st_rc = "Insufficient Data"
+                st_score = 0.0
+                mean_d = None
+            else:
+                crit_share = st_counts["critical"] / forecasted_n
+                watch_share = st_counts["watch"] / forecasted_n
+                st_score = round(float(np.percentile(st_scores, 75)) if st_scores else 0.0, 1)
+                mean_d = round(float(np.mean(st_depths)), 2)
+                if crit_share >= 0.22 or st_score >= 68.0:
+                    st_rc = "Critical"
+                elif (crit_share + watch_share) >= 0.35 or st_score >= 40.0:
+                    st_rc = "Watch"
+                else:
+                    st_rc = "Safe"
+
+            states_summary_rows.append(
                 {
-                    "block_id": b.block_id,
-                    "state": b.state,
-                    "district": b.district,
-                    "block_name": b.block_name,
-                    "scenario": scen_key,
-                    "rainfall_pct_of_normal": rain_pct,
-                    "forecast_season": payload["forecast_season"],
-                    "current_depth_mbgl": payload["current_depth_mbgl"],
-                    "predicted_depth_mbgl": payload["predicted_depth_mbgl"],
-                    "lower_bound": payload["lower_bound"],
-                    "upper_bound": payload["upper_bound"],
-                    "predicted_yoy_change_mbgl": payload["predicted_yoy_change_mbgl"],
-                    "risk_class": payload["risk_class"],
-                    "risk_score": payload["risk_score"],
-                    "model_version": model_version,
-                    "generated_at": pd.Timestamp.now(tz="UTC"),
+                    "state_code": st_code,
+                    "state": state_name,
+                    "lat": round(float(st_df["lat"].mean()), 3),
+                    "lon": round(float(st_df["lon"].mean()), 3),
+                    "total_blocks": st_counts["total_blocks"],
+                    "forecasted_blocks": forecasted_n,
+                    "critical": st_counts["critical"],
+                    "watch": st_counts["watch"],
+                    "safe": st_counts["safe"],
+                    "insufficient_data": st_counts["insufficient_data"],
+                    "mean_predicted_depth_mbgl": mean_d,
+                    "risk_class": st_rc,
+                    "risk_score": st_score,
                 }
             )
 
-        blocks_doc = {
-            "state": "Maharashtra",
-            "granularity": "block",
-            "scenario": scen_key,
-            "forecast_season": dominant_forecast_season,
-            "count": len(blocks_list),
-            "blocks": blocks_list,
-        }
-        (api_dir / f"blocks_{scen_key}.json").write_text(json.dumps(blocks_doc, ensure_ascii=False), encoding="utf-8")
-        if scen_key == "normal":
-            (api_dir / "blocks.json").write_text(json.dumps(blocks_doc, ensure_ascii=False), encoding="utf-8")
-
-        rankings_list.sort(key=lambda r: (r["risk_score"], r["predicted_depth_mbgl"] or 0.0), reverse=True)
-        for idx, item in enumerate(rankings_list, start=1):
-            item["rank"] = idx
-
-        rank_doc = {
-            "state": "Maharashtra",
-            "scenario": scen_key,
-            "forecast_season": dominant_forecast_season,
-            "summary": summary_counts,
-            "rankings": rankings_list,
-        }
-        (api_dir / "rankings" / f"MH_{scen_key}.json").write_text(
-            json.dumps(rank_doc, ensure_ascii=False), encoding="utf-8"
-        )
-        if scen_key == "normal":
-            (api_dir / "rankings" / "MH.json").write_text(
-                json.dumps(rank_doc, ensure_ascii=False), encoding="utf-8"
-            )
-
-    wl_sorted = wl_df.sort_values(["block_id", "obs_date"])
-    wl_by_blk = {k: g for k, g in wl_sorted.groupby("block_id")}
-
-    rain_df["month_dt"] = pd.to_datetime(rain_df["month"])
-    rain_df["yr"] = rain_df["month_dt"].dt.year
-    rain_df["mo"] = rain_df["month_dt"].dt.month
-    monsoon_df = (
-        rain_df[rain_df["mo"].isin([6, 7, 8, 9])]
-        .groupby(["block_id", "yr"], as_index=False)
-        .agg(rainfall_mm=("rainfall_mm", "sum"), normal_mm=("normal_rainfall_mm", "sum"))
-        .sort_values(["block_id", "yr"])
-    )
-    monsoon_df["departure_pct"] = np.where(
-        monsoon_df["normal_mm"] > 1.0,
-        ((monsoon_df["rainfall_mm"] - monsoon_df["normal_mm"]) / monsoon_df["normal_mm"]) * 100.0,
-        0.0,
-    ).round(1)
-    rain_by_blk = {k: g for k, g in monsoon_df.groupby("block_id")}
-
-    for b in blocks_df.itertuples(index=False):
-        g_wl = wl_by_blk.get(b.block_id)
-        wl_items = [
-            {
-                "obs_date": str(r.obs_date),
-                "season": r.season,
-                "depth_mbgl": float(r.depth_mbgl),
-                "well_count": int(r.well_count),
-                "is_imputed": bool(r.is_imputed),
-            }
-            for r in (g_wl.tail(24).itertuples(index=False) if g_wl is not None else [])
-        ]
-        g_rn = rain_by_blk.get(b.block_id)
-        rn_items = [
-            {
-                "period": f"{int(r.yr)}-monsoon",
-                "rainfall_mm": round(float(r.rainfall_mm), 1),
-                "normal_mm": round(float(r.normal_mm), 1),
-                "departure_pct": float(r.departure_pct),
-            }
-            for r in (g_rn.tail(12).itertuples(index=False) if g_rn is not None else [])
-        ]
-        (api_dir / "history" / f"{b.block_id}.json").write_text(
+        # Save National ALL block index & National ALL rankings + States Summary
+        (api_dir / "blocks" / f"ALL_{scen_key}.json").write_text(
             json.dumps(
                 {
-                    "block_id": b.block_id,
-                    "block_name": b.block_name,
-                    "district": b.district,
-                    "water_levels": wl_items,
-                    "rainfall_seasonal": rn_items,
+                    "state_code": "ALL",
+                    "state": "All India",
+                    "granularity": "block",
+                    "scenario": scen_key,
+                    "forecast_season": dominant_forecast_season,
+                    "count": len(all_blocks_compact),
+                    "blocks": all_blocks_compact,
                 },
                 ensure_ascii=False,
+                separators=(",", ":"),
             ),
+            encoding="utf-8",
+        )
+
+        all_rankings.sort(key=lambda r: (r["risk_score"], r["predicted_depth_mbgl"] or 0.0), reverse=True)
+        for idx, item in enumerate(all_rankings, start=1):
+            item["rank"] = idx
+        all_rank_doc = {
+            "state_code": "ALL",
+            "state": "All India",
+            "scenario": scen_key,
+            "forecast_season": dominant_forecast_season,
+            "summary": national_summary,
+            "rankings": all_rankings[:1000],
+        }
+        (api_dir / "rankings" / f"ALL_{scen_key}.json").write_text(
+            json.dumps(all_rank_doc, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        if scen_key == "normal":
+            (api_dir / "rankings" / "ALL.json").write_text(
+                json.dumps(all_rank_doc, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+
+        states_summary_rows.sort(key=lambda s: (s["risk_score"], s["critical"]), reverse=True)
+        st_sum_doc = {
+            "scope": "All India",
+            "scenario": scen_key,
+            "forecast_season": dominant_forecast_season,
+            "summary": national_summary,
+            "states": states_summary_rows,
+        }
+        (api_dir / f"states_summary_{scen_key}.json").write_text(
+            json.dumps(st_sum_doc, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        if scen_key == "normal":
+            (api_dir / "states_summary.json").write_text(
+                json.dumps(st_sum_doc, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+
+    # Export state-sharded history bundles
+    wl_sorted = wl_df.sort_values(["block_id", "obs_date"])
+    wl_by_blk = {k: g for k, g in wl_sorted.groupby("block_id")}
+    rain_by_blk = {k: g for k, g in monsoon_df.groupby("block_id")}
+
+    for st_code, st_df in sorted(blocks_by_state.items()):
+        st_hist_bundle: dict[str, dict[str, Any]] = {}
+        for b in st_df.itertuples(index=False):
+            g_wl = wl_by_blk.get(b.block_id)
+            wl_items = [
+                {
+                    "obs_date": str(r.obs_date),
+                    "season": r.season,
+                    "depth_mbgl": float(r.depth_mbgl),
+                    "well_count": int(r.well_count),
+                    "is_imputed": bool(r.is_imputed),
+                }
+                for r in (g_wl.tail(22).itertuples(index=False) if g_wl is not None else [])
+            ]
+            g_rn = rain_by_blk.get(b.block_id)
+            rn_items = [
+                {
+                    "period": f"{int(r.yr)}-monsoon",
+                    "rainfall_mm": round(float(r.rainfall_mm), 1),
+                    "normal_mm": round(float(r.normal_mm), 1),
+                    "departure_pct": float(r.departure_pct),
+                }
+                for r in (g_rn.tail(12).itertuples(index=False) if g_rn is not None else [])
+            ]
+            st_hist_bundle[b.block_id] = {
+                "block_id": b.block_id,
+                "state_code": st_code,
+                "state": b.state,
+                "block_name": b.block_name,
+                "district": b.district,
+                "normal_monsoon_mm": float(normal_monsoon_lookup.get(b.block_id, 750.0)),
+                "water_levels": wl_items,
+                "rainfall_seasonal": rn_items,
+            }
+        (api_dir / "history_bundle" / f"{st_code}.json").write_text(
+            json.dumps(st_hist_bundle, ensure_ascii=False, separators=(",", ":")),
             encoding="utf-8",
         )
 
@@ -404,9 +554,11 @@ def main() -> None:
     forecasts_df.to_parquet(f_parquet_path, index=False)
 
     meta_doc = {
+        "scope": "All-India (36 States & UTs)",
         "model_version": model_version,
         "serving_strategy": metrics.get("active_serving_strategy"),
         "forecast_season": dominant_forecast_season,
+        "states_indexed": int(blocks_df["state_code"].nunique()),
         "blocks_indexed": int(len(blocks_df)),
         "blocks_forecasted": int(len(eligible_df)),
         "holdout_mae_mbgl": metrics["holdout_evaluation"]["xgboost_model"]["mae"],
@@ -422,19 +574,19 @@ def main() -> None:
 
     con = duckdb.connect(":memory:")
     con.execute(f"CREATE VIEW forecasts AS SELECT * FROM read_parquet('{f_parquet_path.as_posix()}');")
-    top5 = con.execute(
+    top8 = con.execute(
         """
-        SELECT block_id, district, block_name, current_depth_mbgl, predicted_depth_mbgl, risk_class, risk_score
+        SELECT block_id, state, district, block_name, current_depth_mbgl, predicted_depth_mbgl, risk_class, risk_score
         FROM forecasts
         WHERE scenario = 'normal' AND risk_class <> 'Insufficient Data'
         ORDER BY risk_score DESC
-        LIMIT 5
+        LIMIT 8
         """
     ).fetchdf()
-    print("=== V2 FORECAST GENERATION SUMMARY ===")
+    print("=== ALL-INDIA FORECAST SUMMARY ===")
     print(json.dumps(meta_doc, indent=2))
-    print("=== TOP 5 AT-RISK BLOCKS (NORMAL SCENARIO) ===")
-    print(top5.to_string(index=False))
+    print("=== TOP 8 AT-RISK BLOCKS ACROSS INDIA (NORMAL SCENARIO) ===")
+    print(top8.to_string(index=False))
 
 
 if __name__ == "__main__":

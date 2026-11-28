@@ -51,12 +51,20 @@ def chronological_split(
     work["target_dt"] = pd.to_datetime(work["target_obs_date"])
     work["target_year"] = work["target_dt"].dt.year
 
+    work["state_code"] = work["block_id"].astype(str).str.slice(0, 2)
     years = sorted(work["target_year"].unique())
     if len(years) < 3:
         raise ValueError(f"Need at least 3 distinct target years, got {years}")
 
-    year_counts = work["target_year"].value_counts()
-    viable_years = [y for y in years if year_counts[y] >= 50]
+    # Select latest year with broad multi-state coverage (>= 10 states if multi-state dataset, and >= 100 rows)
+    total_states = int(work["state_code"].nunique())
+    min_states_req = min(10, total_states)
+    viable_years = [
+        y
+        for y in years
+        if int((work["target_year"] == y).sum()) >= 50
+        and int(work.loc[work["target_year"] == y, "state_code"].nunique()) >= min_states_req
+    ]
     test_year = viable_years[-1] if len(viable_years) >= 3 else years[-1]
     prior_years = [y for y in years if y < test_year]
     val_year = prior_years[-1]

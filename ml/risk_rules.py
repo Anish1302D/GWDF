@@ -64,13 +64,36 @@ def calibrate_thresholds_from_data(depths: pd.Series) -> dict[str, float]:
     return thresholds
 
 
+def calibrate_state_thresholds_from_data(df: pd.DataFrame) -> dict[str, dict[str, float]]:
+    """Calibrate per-state depth thresholds bounded within hydrogeologically sound ranges."""
+    out: dict[str, dict[str, float]] = {}
+    if "block_id" not in df.columns:
+        return out
+    work = df[["block_id", "depth_mbgl"]].dropna().copy()
+    work["state_code"] = work["block_id"].astype(str).str.slice(0, 2)
+    for st_code, grp in work.groupby("state_code"):
+        if len(grp) < 25:
+            continue
+        vals = grp["depth_mbgl"]
+        p65 = float(np.percentile(vals, 65))
+        p85 = float(np.percentile(vals, 85))
+        p95 = float(np.percentile(vals, 95))
+        t = dict(DEFAULT_THRESHOLDS)
+        t["watch_depth_mbgl"] = round(max(6.5, min(15.0, p65)), 2)
+        t["critical_depth_mbgl"] = round(max(10.5, min(24.0, p85)), 2)
+        t["critical_combo_depth_mbgl"] = round(0.5 * (t["watch_depth_mbgl"] + t["critical_depth_mbgl"]), 2)
+        t["score_depth_scale"] = round(max(14.0, min(35.0, p95)), 2)
+        out[str(st_code)] = t
+    return out
+
+
 def classify_risk(
     predicted_depth_mbgl: float,
     yoy_delta_mbgl: float,
     trend_5yr_mbgl: float,
     thresholds: dict[str, float] | None = None,
 ) -> tuple[str, float]:
-    """Return `(risk_class, risk_score)` where higher `mbgl` / positive `yoy_delta` = worse stress."""
+    """Return `(risk_class, risk_score)` accounting for both local aquifer limits & absolute deep depletion."""
     t = thresholds or DEFAULT_THRESHOLDS
     d = float(predicted_depth_mbgl)
     yoy = float(yoy_delta_mbgl)
@@ -83,6 +106,7 @@ def classify_risk(
 
     is_critical = (
         d >= t["critical_depth_mbgl"]
+        or d >= 26.0  # Universal severe deep-aquifer extraction ceiling (e.g., Punjab/Rajasthan/Haryana)
         or (d >= t["critical_combo_depth_mbgl"] and yoy >= t["critical_combo_yoy_mbgl"])
         or yoy >= t["critical_yoy_mbgl"]
         or (tr >= t["critical_trend_mbgl_yr"] and d >= t["watch_depth_mbgl"])
@@ -93,6 +117,7 @@ def classify_risk(
 
     is_watch = (
         d >= t["watch_depth_mbgl"]
+        or d >= 16.0
         or yoy >= t["watch_yoy_mbgl"]
         or tr >= t["watch_trend_mbgl_yr"]
     )

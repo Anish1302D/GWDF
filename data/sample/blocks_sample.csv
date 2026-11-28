@@ -1,41 +1,51 @@
 block_id,state_code,state,district,block_name,extraction_stage,extraction_stage_code,lat,lon,granularity
-MH-AHI-001,MH,Maharashtra,Ahilyanagar,Akola,Unknown,-1,19.5137,73.9026,block
-MH-AHI-002,MH,Maharashtra,Ahilyanagar,Jamkhed,Unknown,-1,18.6602,75.3484,block
-MH-AHI-003,MH,Maharashtra,Ahilyanagar,Karjat,Unknown,-1,18.5652,74.9561,block
-MH-AHI-004,MH,Maharashtra,Ahilyanagar,Kopargaon,Unknown,-1,19.8753,74.4543,block
-MH-AHI-005,MH,Maharashtra,Ahilyanagar,Nagar,Unknown,-1,19.076,74.7461,block
-MH-AHI-006,MH,Maharashtra,Ahilyanagar,Nevasa,Unknown,-1,19.4726,74.9592,block
-MH-AHI-007,MH,Maharashtra,Ahilyanagar,Parner,Unknown,-1,19.0784,74.4064,block
-MH-AHI-008,MH,Maharashtra,Ahilyanagar,Pathardi,Unknown,-1,19.1717,75.1596,block
-MH-AHI-009,MH,Maharashtra,Ahilyanagar,Rahta,Unknown,-1,19.6783,74.5092,block
-MH-AHI-010,MH,Maharashtra,Ahilyanagar,Rahuri,Unknown,-1,19.4005,74.6162,block
-MH-AHI-011,MH,Maharashtra,Ahilyanagar,Sangamner,Unknown,-1,19.4927,74.2441,block
-MH-AHI-012,MH,Maharashtra,Ahilyanagar,Shevgaon,Unknown,-1,19.364,75.287,block
-MH-AHI-013,MH,Maharashtra,Ahilyanagar,Shrigonda,Unknown,-1,18.7033,74.6613,block
-MH-AHI-014,MH,Maharashtra,Ahilyanagar,Shrirampur,Unknown,-1,19.6303,74.7072,block
-MH-AKO-001,MH,Maharashtra,Akola,Akola,Unknown,-1,20.7326,77.0935,block
-MH-AKO-002,MH,Maharashtra,Akola,Akot,Unknown,-1,21.0586,77.0579,block
-MH-AKO-003,MH,Maharashtra,Akola,Balapur,Unknown,-1,20.7329,76.8339,block
-MH-AKO-004,MH,Maharashtra,Akola,Barshitakli,Unknown,-1,20.5256,77.1529,block
-MH-AKO-005,MH,Maharashtra,Akola,Murtijapur,Unknown,-1,20.7442,77.418,block
-MH-AKO-006,MH,Maharashtra,Akola,Patur,Unknown,-1,20.4298,76.85,block
-MH-AKO-007,MH,Maharashtra,Akola,Telhara,Unknown,-1,21.0446,76.8712,block
-MH-AMR-001,MH,Maharashtra,Amravati,Achalpur,Unknown,-1,21.2336,77.4676,block
-MH-AMR-002,MH,Maharashtra,Amravati,Amravati,Unknown,-1,20.9948,77.8115,block
-MH-AMR-003,MH,Maharashtra,Amravati,Anjangaon Surji,Unknown,-1,21.1199,77.3037,block
-MH-AMR-004,MH,Maharashtra,Amravati,Bhatkuli,Unknown,-1,20.9735,77.602,block
-MH-AMR-005,MH,Maharashtra,Amravati,Chandur Railway,Unknown,-1,20.7719,77.9684,block
-MH-AMR-006,MH,Maharashtra,Amravati,Chandurbazar,Unknown,-1,21.2653,77.6906,block
-MH-AMR-007,MH,Maharashtra,Amravati,Chikhaldara,Unknown,-1,21.4584,77.2459,block
-MH-AMR-008,MH,Maharashtra,Amravati,Daryapur,Unknown,-1,20.9536,77.3238,block
-MH-AMR-009,MH,Maharashtra,Amravati,Dhamangaon Railway,Unknown,-1,20.7516,78.1594,block
-MH-AMR-010,MH,Maharashtra,Amravati,Dharni,Unknown,-1,21.4839,76.9329,block
-MH-AMR-011,MH,Maharashtra,Amravati,Morshi,Unknown,-1,21.2773,77.9555,block
-MH-AMR-012,MH,Maharashtra,Amravati,Nandgaon-Khandeshwar,Unknown,-1,20.6917,77.7613,block
-MH-AMR-013,MH,Maharashtra,Amravati,Teosa,Unknown,-1,20.9754,78.076,block
-MH-AMR-014,MH,Maharashtra,Amravati,Warud,Unknown,-1,21.4599,78.2809,block
-MH-BEE-001,MH,Maharashtra,Beed,Ambejogai,Unknown,-1,18.7542,76.4624,block
-MH-BEE-002,MH,Maharashtra,Beed,Ashti,Unknown,-1,18.9074,75.0914,block
-MH-BEE-003,MH,Maharashtra,Beed,Bid,Unknown,-1,18.9265,75.7749,block
-MH-BEE-004,MH,Maharashtra,Beed,Dharur,Unknown,-1,18.886,76.1828,block
-MH-BEE-005,MH,Maharashtra,Beed,Georai,Unknown,-1,19.2388,75.7251,block
+AN-NIC-001,AN,Andaman And Nicobar Islands,Nicobars,Car Nicobar,Unknown,-1,9.1771,92.7717,block
+AN-NIC-002,AN,Andaman And Nicobar Islands,Nicobars,Great Nicobar,Unknown,-1,7.0676,93.782,block
+AN-NIC-003,AN,Andaman And Nicobar Islands,Nicobars,Nancowry,Unknown,-1,8.0968,93.381,block
+AN-NOR-001,AN,Andaman And Nicobar Islands,North And Middle Andaman,Diglipur,Unknown,-1,13.2349,92.9273,block
+AN-NOR-002,AN,Andaman And Nicobar Islands,North And Middle Andaman,Mayabunder,Unknown,-1,12.7755,92.8224,block
+AN-NOR-003,AN,Andaman And Nicobar Islands,North And Middle Andaman,Rangat,Unknown,-1,12.4127,92.8154,block
+AN-SOU-001,AN,Andaman And Nicobar Islands,South Andaman,Ferrargunj,Unknown,-1,11.859,92.648,block
+AN-SOU-002,AN,Andaman And Nicobar Islands,South Andaman,Little Andaman,Unknown,-1,10.7021,92.4872,block
+AN-SOU-003,AN,Andaman And Nicobar Islands,South Andaman,Port Blair,Unknown,-1,11.7955,92.8577,block
+AP-ANA-001,AP,Andhra Pradesh,Anantapur,Agali,Unknown,-1,13.8053,77.0406,block
+AP-ANA-002,AP,Andhra Pradesh,Anantapur,Amadagur,Unknown,-1,13.9325,78.0539,block
+AP-ANA-003,AP,Andhra Pradesh,Anantapur,Amarapuram,Unknown,-1,14.0859,76.9916,block
+AP-ANA-004,AP,Andhra Pradesh,Anantapur,Anantapur,Unknown,-1,14.6496,77.5998,block
+AP-ANA-005,AP,Andhra Pradesh,Anantapur,Atmakur,Unknown,-1,14.6179,77.4108,block
+AP-ANA-006,AP,Andhra Pradesh,Anantapur,Bathalapalle,Unknown,-1,14.4894,77.8082,block
+AP-ANA-007,AP,Andhra Pradesh,Anantapur,Beluguppa,Unknown,-1,14.6826,77.1761,block
+AP-ANA-008,AP,Andhra Pradesh,Anantapur,Bommanahal,Unknown,-1,14.9506,77.0073,block
+AP-ANA-009,AP,Andhra Pradesh,Anantapur,Brahmasamudram,Unknown,-1,14.5541,76.9639,block
+AP-ANA-010,AP,Andhra Pradesh,Anantapur,Bukkapatnam,Unknown,-1,14.2558,77.9045,block
+AP-ANA-011,AP,Andhra Pradesh,Anantapur,Bukkaraya Samudram,Unknown,-1,14.7106,77.6854,block
+AP-ANA-012,AP,Andhra Pradesh,Anantapur,Chennekothapalle,Unknown,-1,14.283,77.6604,block
+AP-ANA-013,AP,Andhra Pradesh,Anantapur,Chilamathur,Unknown,-1,13.8532,77.7253,block
+AP-ANA-014,AP,Andhra Pradesh,Anantapur,D.Hirehal,Unknown,-1,14.9353,76.8706,block
+AP-ANA-015,AP,Andhra Pradesh,Anantapur,Dharmavaram,Unknown,-1,14.4132,77.7443,block
+AP-ANA-016,AP,Andhra Pradesh,Anantapur,Gandlapenta,Unknown,-1,14.1004,78.262,block
+AP-ANA-017,AP,Andhra Pradesh,Anantapur,Garladinne,Unknown,-1,14.8506,77.5461,block
+AP-ANA-018,AP,Andhra Pradesh,Anantapur,Gooty,Unknown,-1,15.1274,77.6325,block
+AP-ANA-019,AP,Andhra Pradesh,Anantapur,Gorantla,Unknown,-1,13.9825,77.7756,block
+AP-ANA-020,AP,Andhra Pradesh,Anantapur,Gudibanda,Unknown,-1,13.9682,77.1164,block
+AP-ANA-021,AP,Andhra Pradesh,Anantapur,Gummagatta,Unknown,-1,14.6162,76.8591,block
+AP-ANA-022,AP,Andhra Pradesh,Anantapur,Guntakal,Unknown,-1,15.1403,77.4633,block
+AP-ANA-023,AP,Andhra Pradesh,Anantapur,Hindupur,Unknown,-1,13.8147,77.5283,block
+AP-ANA-024,AP,Andhra Pradesh,Anantapur,Kadiri,Unknown,-1,14.1339,78.1375,block
+AP-ANA-025,AP,Andhra Pradesh,Anantapur,Kalyandurg,Unknown,-1,14.5486,77.1913,block
+AP-ANA-026,AP,Andhra Pradesh,Anantapur,Kambadur,Unknown,-1,14.4063,77.2536,block
+AP-ANA-027,AP,Andhra Pradesh,Anantapur,Kanaganapalle,Unknown,-1,14.4461,77.4776,block
+AP-ANA-028,AP,Andhra Pradesh,Anantapur,Kanekal,Unknown,-1,14.8165,77.0726,block
+AP-ANA-029,AP,Andhra Pradesh,Anantapur,Kothacheruvu,Unknown,-1,14.1936,77.7246,block
+AP-ANA-030,AP,Andhra Pradesh,Anantapur,Kudair,Unknown,-1,14.7649,77.3991,block
+AP-ANA-031,AP,Andhra Pradesh,Anantapur,Kundurpi,Unknown,-1,14.3113,77.0576,block
+AP-ANA-032,AP,Andhra Pradesh,Anantapur,Lepakshi,Unknown,-1,13.8024,77.5849,block
+AP-ANA-033,AP,Andhra Pradesh,Anantapur,Madakasira,Unknown,-1,13.9252,77.2926,block
+AP-ANA-034,AP,Andhra Pradesh,Anantapur,Mudigubba,Unknown,-1,14.3858,78.0101,block
+AP-ANA-035,AP,Andhra Pradesh,Anantapur,Nallacheruvu,Unknown,-1,14.0034,78.1742,block
+AP-ANA-036,AP,Andhra Pradesh,Anantapur,Nallamada,Unknown,-1,14.1564,78.0122,block
+AP-ANA-037,AP,Andhra Pradesh,Anantapur,Nambulipulikunta,Unknown,-1,14.0625,78.3768,block
+AP-ANA-038,AP,Andhra Pradesh,Anantapur,Narpala,Unknown,-1,14.6965,77.8161,block
+AP-ANA-039,AP,Andhra Pradesh,Anantapur,Obuladevaracheruvu,Unknown,-1,14.0159,77.9716,block
+AP-ANA-040,AP,Andhra Pradesh,Anantapur,Pamidi,Unknown,-1,14.9684,77.5325,block
+AP-ANA-041,AP,Andhra Pradesh,Anantapur,Parigi,Unknown,-1,13.8974,77.4678,block
