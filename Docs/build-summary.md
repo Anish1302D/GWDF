@@ -40,9 +40,9 @@ WellCast implements a **serverless, zero-idle-compute AWS lakehouse and precompu
 | **Clean Curated Feature Table** | **7,860** block-season rows (`2013–2025`), **5,549** supervised pairs (`0` duplicate keys, strict 6-month horizon) |
 | **Chronological Evaluation Split** | Train: `2014–2023` (`5,103` rows) · Val: `2024` (`199` rows) · Untouched Holdout Test: `2025` (`247` rows) |
 | **Seasonal Naive Baseline (2025 Holdout)** | `MAE = 0.8727 m` · `RMSE = 1.2246 m` · `R² = 0.8913` (`Pre-Monsoon MAE = 1.0226 m`) |
-| **Residual Monotone XGBoost (2025 Holdout)** | **`MAE = 0.8703 m`** · **`RMSE = 1.1723 m`** · **`R² = 0.9004`** (**`Pre-Monsoon MAE = 0.9441 m`, +7.7% skill**) |
-| **P10–P90 Uncertainty Interval Coverage** | **`91.9%`** empirical coverage on 2025 holdout (`mean width = 3.71 m`) |
-| **Precomputed Drought Scenarios** | `normal` (`6.938 m` mean), `minus10` (`6.966 m`), `minus20` (`7.015 m`), `minus30` (`7.024 m`) — strictly monotonic |
+| **Dual-Specialist Monotone XGBoost v2 (2025 Holdout)** | **`MAE = 0.8147 m` (+6.65% skill)** · **`RMSE = 1.1078 m` (+9.54% skill)** · **`R² = 0.9110`** (**`Pre-Monsoon MAE = 0.8881 m`, +13.15% skill**) |
+| **CQR P10–P90 Uncertainty Interval Coverage** | **`76.92%`** empirical coverage on 2025 holdout (`mean width = 2.62 m`) |
+| **Precomputed Drought Scenarios** | `normal` (`7.028 m` mean), `minus10` (`7.083 m`), `minus20` (`7.156 m`), `minus30` (`7.181 m`) — strictly monotonic |
 
 ---
 

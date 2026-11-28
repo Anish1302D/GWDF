@@ -404,8 +404,8 @@ Verified results on **Maharashtra (`356` blocks across `36` districts)**:
 | Clean leak-free block-season feature rows | `7,860` rows (`5,549` supervised pairs; `100%` block match rate) |
 | Chronological split | Train `2014–2023` · Validation `2024` · Untouched Holdout Test `2025` |
 | Seasonal Naive baseline (2025 holdout) | `MAE = 0.8727 m` · `RMSE = 1.2246 m` · `R² = 0.8913` (`Pre-Monsoon MAE = 1.0226 m`) |
-| **Residual Monotone XGBoost (2025 holdout)** | **`MAE = 0.8703 m`** · **`RMSE = 1.1723 m`** · **`R² = 0.9004`** (**`Pre-Monsoon MAE = 0.9441 m`, +7.7% skill**) |
-| **Empirical P10–P90 interval coverage** | **`91.9%`** on untouched 2025 holdout |
+| **Dual-Specialist Monotone XGBoost v2 (2025 holdout)** | **`MAE = 0.8147 m` (+6.65% skill)** · **`RMSE = 1.1078 m` (+9.54% skill)** · **`R² = 0.9110`** (**`Pre-Monsoon MAE = 0.8881 m`, +13.15% skill**) |
+| **CQR P10–P90 interval coverage** | **`76.92%`** on untouched 2025 holdout (`mean width = 2.62 m`, see [`Docs/MODEL_TRAINING_REPORT.md`](./Docs/MODEL_TRAINING_REPORT.md)) |
 | Simplified block boundary GeoJSON | `455.7 KB` (`356` polygons for fast mobile 4G loading) |
 
 ---

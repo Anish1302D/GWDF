@@ -38,11 +38,64 @@ export default function MapView({
       scrollWheelZoom: true,
     });
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; CARTO',
-      subdomains: "abcd",
-      maxZoom: 18,
-    }).addTo(map);
+    const maptilerKey = (import.meta.env.VITE_MAPTILER_KEY || "").trim();
+    const mtAttr =
+      '&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+    const lightCanvas = maptilerKey
+      ? L.tileLayer(
+          `https://api.maptiler.com/maps/dataviz-light/256/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(maptilerKey)}`,
+        { attribution: mtAttr, maxZoom: 19 }
+      )
+      : L.layerGroup([
+        L.tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+          {
+            attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+            maxZoom: 16,
+          }
+        ),
+        L.tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+            { maxZoom: 16 }
+        ),
+      ]);
+
+    const osmStreets = maptilerKey
+      ? L.tileLayer(
+        `https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(maptilerKey)}`,
+        { attribution: mtAttr, maxZoom: 19 }
+      )
+      : L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      });
+
+    const terrainTopo = maptilerKey
+      ? L.tileLayer(
+        `https://api.maptiler.com/maps/topo-v2/256/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(maptilerKey)}`,
+        { attribution: mtAttr, maxZoom: 18 }
+      )
+      : L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Tiles &copy; Esri &mdash; USGS, NOAA",
+          maxZoom: 18,
+        }
+      );
+
+    lightCanvas.addTo(map);
+    L.control
+      .layers(
+        {
+          "Light Canvas": lightCanvas,
+          "Towns & Roads (OSM)": osmStreets,
+          "Topographic / Terrain": terrainTopo,
+        },
+        null,
+        { position: "topright" }
+      )
+      .addTo(map);
 
     mapRef.current = map;
     return () => {

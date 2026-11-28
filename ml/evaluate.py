@@ -1,11 +1,11 @@
-"""Strict time-based evaluation utilities for WellCast groundwater forecasting."""
+"""Strict chronological & walk-forward evaluation utilities for WellCast v2."""
 
 from __future__ import annotations
 
 from typing import Any
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, median_absolute_error, r2_score
 
 FEATURE_COLUMNS: list[str] = [
     "depth_mbgl",
@@ -13,33 +13,48 @@ FEATURE_COLUMNS: list[str] = [
     "prev_change_mbgl",
     "same_season_last_year_depth",
     "yoy_change_mbgl",
+    "target_season_2yr_ago_depth",
+    "block_curr_season_hist_mean",
+    "block_target_season_hist_mean",
+    "prev_anomaly_vs_target_mean",
+    "curr_anomaly_vs_season_mean",
+    "block_hist_std",
+    "district_curr_depth_mean",
+    "block_vs_district_depth_diff",
+    "district_seasonal_shift",
     "depth_trend_5yr",
     "rain_3m_mm",
     "rain_6m_mm",
     "rain_12m_mm",
+    "rain_24m_mm",
     "rain_departure_6m_pct",
-    "extraction_stage_code",
+    "rain_departure_12m_pct",
+    "rain_departure_24m_pct",
+    "lat",
+    "lon",
+    "well_count",
     "season_code",
 ]
 
 # Monotone constraints matching FEATURE_COLUMNS:
-# Higher rainfall (rain_3m, rain_6m, rain_12m, rain_departure_6m_pct) -> non-positive (-1) effect on depth_mbgl
-MONOTONE_CONSTRAINTS = "(0,0,0,0,0,0,-1,-1,-1,-1,0,0)"
+# Higher precipitation & positive rainfall departures (indices 15..21) -> non-positive (-1) effect on depth_mbgl
+MONOTONE_CONSTRAINTS = (
+    "(" + ",".join("-1" if col.startswith("rain_") else "0" for col in FEATURE_COLUMNS) + ")"
+)
 
 
 def chronological_split(
     df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
-    """Split training dataframe chronologically by `target_obs_date` year (NEVER random shuffle)."""
+    """Split dataset chronologically by `target_obs_date` year (zero random shuffle)."""
     work = df.dropna(subset=["target_depth_next", "target_obs_date", "baseline_pred_next"]).copy()
     work["target_dt"] = pd.to_datetime(work["target_obs_date"])
     work["target_year"] = work["target_dt"].dt.year
 
     years = sorted(work["target_year"].unique())
     if len(years) < 3:
-        raise ValueError(f"Need at least 3 distinct target years for chronological split, got {years}")
+        raise ValueError(f"Need at least 3 distinct target years, got {years}")
 
-    # Pick latest year with >= 50 block-season observations as holdout test year
     year_counts = work["target_year"].value_counts()
     viable_years = [y for y in years if year_counts[y] >= 50]
     test_year = viable_years[-1] if len(viable_years) >= 3 else years[-1]
@@ -50,7 +65,6 @@ def chronological_split(
     val_df = work[work["target_year"] == val_year].copy()
     test_df = work[work["target_year"] == test_year].copy()
 
-    # Strict anti-leakage temporal assertions
     assert train_df["target_dt"].max() < val_df["target_dt"].min(), "Temporal leak between train and val!"
     assert val_df["target_dt"].max() < test_df["target_dt"].min(), "Temporal leak between val and test!"
 
@@ -84,11 +98,30 @@ def enforce_prediction_bounds(
     return np.round(p50, 2), np.round(low, 2), np.round(high, 2)
 
 
+def compute_conformal_adjustment(
+    y_cal: np.ndarray,
+    q_low_cal: np.ndarray,
+    q_high_cal: np.ndarray,
+    target_coverage: float = 0.80,
+) -> float:
+    """Romano et al. (2019) Conformalized Quantile Regression (CQR) finite-sample offset."""
+    scores = np.maximum(q_low_cal - y_cal, y_cal - q_high_cal)
+    n = len(scores)
+    level = min(1.0, np.ceil((n + 1) * target_coverage) / n)
+    return float(np.quantile(scores, level))
+
+
 def compute_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     mae = float(mean_absolute_error(y_true, y_pred))
+    medae = float(median_absolute_error(y_true, y_pred))
     rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
     r2 = float(r2_score(y_true, y_pred)) if len(y_true) > 2 else 0.0
-    return {"mae": round(mae, 4), "rmse": round(rmse, 4), "r2": round(r2, 4)}
+    return {
+        "mae": round(mae, 4),
+        "medae": round(medae, 4),
+        "rmse": round(rmse, 4),
+        "r2": round(r2, 4),
+    }
 
 
 def evaluate_holdout(
@@ -97,16 +130,27 @@ def evaluate_holdout(
     lower_bound: np.ndarray,
     upper_bound: np.ndarray,
 ) -> dict[str, Any]:
-    """Compare model predictions against Seasonal Naive baseline on chronological holdout test set."""
+    """Compare model predictions against Seasonal Naive & Climatology benchmarks on untouched holdout."""
     y_true = test_df["target_depth_next"].to_numpy(dtype=float)
     y_base = test_df["baseline_pred_next"].to_numpy(dtype=float)
+    y_clim = (
+        test_df["block_target_season_hist_mean"]
+        .fillna(test_df["baseline_pred_next"])
+        .to_numpy(dtype=float)
+    )
 
     base_metrics = compute_regression_metrics(y_true, y_base)
+    clim_metrics = compute_regression_metrics(y_true, y_clim)
     xgb_metrics = compute_regression_metrics(y_true, pred_p50)
 
     skill_pct = (
         round(((base_metrics["mae"] - xgb_metrics["mae"]) / base_metrics["mae"]) * 100.0, 2)
         if base_metrics["mae"] > 0
+        else 0.0
+    )
+    rmse_skill_pct = (
+        round(((base_metrics["rmse"] - xgb_metrics["rmse"]) / base_metrics["rmse"]) * 100.0, 2)
+        if base_metrics["rmse"] > 0
         else 0.0
     )
 
@@ -115,21 +159,26 @@ def evaluate_holdout(
     mean_width = round(float(np.mean(upper_bound - lower_bound)), 2)
 
     by_season: dict[str, Any] = {}
-    for s_code, s_label in [(0, "pre-monsoon"), (1, "post-monsoon")]:
+    for s_code in (0, 1):
         mask = (test_df["season_code"] == s_code).to_numpy()
-        # Note: row at season_code=0 (pre-monsoon) predicts post-monsoon target, and vice versa
         target_season = "post-monsoon" if s_code == 0 else "pre-monsoon"
         if int(mask.sum()) >= 5:
+            b_mae = float(mean_absolute_error(y_true[mask], y_base[mask]))
+            m_mae = float(mean_absolute_error(y_true[mask], pred_p50[mask]))
             by_season[target_season] = {
                 "rows": int(mask.sum()),
-                "baseline_mae": round(float(mean_absolute_error(y_true[mask], y_base[mask])), 4),
-                "model_mae": round(float(mean_absolute_error(y_true[mask], pred_p50[mask])), 4),
+                "baseline_mae": round(b_mae, 4),
+                "climatology_mae": round(float(mean_absolute_error(y_true[mask], y_clim[mask])), 4),
+                "model_mae": round(m_mae, 4),
+                "skill_pct": round(((b_mae - m_mae) / b_mae) * 100.0, 2) if b_mae > 0 else 0.0,
             }
 
     return {
         "baseline_seasonal_naive": base_metrics,
+        "historical_seasonal_climatology": clim_metrics,
         "xgboost_model": xgb_metrics,
         "skill_vs_baseline_pct": skill_pct,
+        "rmse_skill_vs_baseline_pct": rmse_skill_pct,
         "beats_baseline": bool(xgb_metrics["mae"] < base_metrics["mae"]),
         "p10_p90_coverage_pct": coverage_pct,
         "mean_interval_width_mbgl": mean_width,

@@ -1,10 +1,7 @@
-"""Phase 2 Local Feature Engineering & Anti-Leakage Audit using DuckDB over Parquet Lake.
+"""Phase 2 v2 Local Feature Engineering & Anti-Leakage Audit using DuckDB over Parquet Lake.
 
-Mirrors `sql/02_features.sql` (Amazon Athena) against `data/processed_local/raw/` Parquet files,
-executes mandatory anti-leakage SQL assertions, and exports:
-  - `data/processed_local/curated/features/features.parquet`
-  - `data/processed_local/curated/ml_train/train_features.parquet`
-  - `data/processed_local/curated/ml_inference/latest_features.parquet`
+Mirrors `sql/02_features.sql` (Athena v2) to engineer strictly causal hydrological,
+seasonal-equilibrium, spatial district-context, and multi-year drought features.
 """
 
 from __future__ import annotations
@@ -43,38 +40,41 @@ def main() -> None:
         block_id,
         CAST(month AS DATE) AS month,
         ROUND(SUM(rainfall_mm) OVER (
-          PARTITION BY block_id ORDER BY month
-          ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
         ), 2) AS rain_3m_mm,
         ROUND(SUM(rainfall_mm) OVER (
-          PARTITION BY block_id ORDER BY month
-          ROWS BETWEEN 5 PRECEDING AND CURRENT ROW
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 5 PRECEDING AND CURRENT ROW
         ), 2) AS rain_6m_mm,
         ROUND(SUM(rainfall_mm) OVER (
-          PARTITION BY block_id ORDER BY month
-          ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
         ), 2) AS rain_12m_mm,
+        ROUND(SUM(rainfall_mm) OVER (
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 23 PRECEDING AND CURRENT ROW
+        ), 2) AS rain_24m_mm,
         ROUND(SUM(normal_rainfall_mm) OVER (
-          PARTITION BY block_id ORDER BY month
-          ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
         ), 2) AS rain_3m_normal_mm,
         ROUND(SUM(normal_rainfall_mm) OVER (
-          PARTITION BY block_id ORDER BY month
-          ROWS BETWEEN 5 PRECEDING AND CURRENT ROW
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 5 PRECEDING AND CURRENT ROW
         ), 2) AS rain_6m_normal_mm,
         ROUND(SUM(normal_rainfall_mm) OVER (
-          PARTITION BY block_id ORDER BY month
-          ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
         ), 2) AS rain_12m_normal_mm,
+        ROUND(SUM(normal_rainfall_mm) OVER (
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 23 PRECEDING AND CURRENT ROW
+        ), 2) AS rain_24m_normal_mm,
         COUNT(rainfall_mm) OVER (
-          PARTITION BY block_id ORDER BY month
-          ROWS BETWEEN 5 PRECEDING AND CURRENT ROW
+          PARTITION BY block_id ORDER BY month ROWS BETWEEN 5 PRECEDING AND CURRENT ROW
         ) AS rain_6m_obs_count
       FROM wellcast.rainfall_monthly
     ),
-    wl_lags AS (
+    wl_enriched AS (
       SELECT
         w.block_id,
+        b.district,
+        b.lat,
+        b.lon,
+        b.extraction_stage_code,
         CAST(w.obs_date AS DATE) AS obs_date,
         w.year,
         w.season,
@@ -85,13 +85,40 @@ def main() -> None:
         LAG(w.depth_mbgl, 1) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS prev_depth_mbgl,
         LAG(w.obs_date, 1) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS prev_obs_date,
         LAG(w.depth_mbgl, 2) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS same_season_last_year_depth,
-        LAG(w.obs_date, 2) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS same_season_last_year_date,
+        LAG(w.depth_mbgl, 3) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS target_season_2yr_ago_depth,
         LAG(w.depth_mbgl, 10) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS depth_5yr_ago,
         LAG(w.obs_date, 10) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS date_5yr_ago,
+        AVG(w.depth_mbgl) OVER (
+          PARTITION BY w.block_id, w.season_code ORDER BY w.obs_date
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS block_curr_season_hist_mean,
+        AVG(w.depth_mbgl) OVER (
+          PARTITION BY w.block_id ORDER BY w.obs_date
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS block_overall_hist_mean,
+        STDDEV_SAMP(w.depth_mbgl) OVER (
+          PARTITION BY w.block_id ORDER BY w.obs_date
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS block_hist_std,
+        COUNT(*) OVER (
+          PARTITION BY w.block_id ORDER BY w.obs_date
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS block_past_obs_count,
+        COUNT(*) OVER (PARTITION BY w.block_id) AS block_total_obs,
         LEAD(w.obs_date, 1) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS target_obs_date,
-        LEAD(w.depth_mbgl, 1) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS raw_target_depth_next,
-        COUNT(*) OVER (PARTITION BY w.block_id) AS block_total_obs
+        LEAD(w.depth_mbgl, 1) OVER (PARTITION BY w.block_id ORDER BY w.obs_date) AS raw_target_depth_next
       FROM wellcast.water_level w
+      JOIN wellcast.block b ON w.block_id = b.block_id
+    ),
+    wl_with_target_clim AS (
+      SELECT
+        e.*,
+        LAG(e.block_curr_season_hist_mean, 1) OVER (
+          PARTITION BY e.block_id ORDER BY e.obs_date
+        ) AS block_target_season_hist_mean,
+        AVG(e.depth_mbgl) OVER (PARTITION BY e.district, e.obs_date) AS district_curr_depth_mean,
+        AVG(e.prev_depth_mbgl) OVER (PARTITION BY e.district, e.obs_date) AS district_prev_depth_mean
+      FROM wl_enriched e
     )
     SELECT
       w.block_id,
@@ -99,11 +126,22 @@ def main() -> None:
       w.year,
       w.season,
       w.season_code,
+      ROUND(w.lat, 4) AS lat,
+      ROUND(w.lon, 4) AS lon,
       w.depth_mbgl,
       w.prev_depth_mbgl,
-      ROUND(w.depth_mbgl - w.prev_depth_mbgl, 2) AS prev_change_mbgl,
+      ROUND(w.depth_mbgl - w.prev_depth_mbgl, 3) AS prev_change_mbgl,
       w.same_season_last_year_depth,
-      ROUND(w.depth_mbgl - w.same_season_last_year_depth, 2) AS yoy_change_mbgl,
+      ROUND(w.depth_mbgl - w.same_season_last_year_depth, 3) AS yoy_change_mbgl,
+      w.target_season_2yr_ago_depth,
+      ROUND(w.block_curr_season_hist_mean, 3) AS block_curr_season_hist_mean,
+      ROUND(w.block_target_season_hist_mean, 3) AS block_target_season_hist_mean,
+      ROUND(w.prev_depth_mbgl - w.block_target_season_hist_mean, 3) AS prev_anomaly_vs_target_mean,
+      ROUND(w.depth_mbgl - w.block_curr_season_hist_mean, 3) AS curr_anomaly_vs_season_mean,
+      ROUND(COALESCE(w.block_hist_std, 1.0), 3) AS block_hist_std,
+      ROUND(w.district_curr_depth_mean, 3) AS district_curr_depth_mean,
+      ROUND(w.depth_mbgl - w.district_curr_depth_mean, 3) AS block_vs_district_depth_diff,
+      ROUND(w.district_curr_depth_mean - w.district_prev_depth_mean, 3) AS district_seasonal_shift,
       ROUND(
         CASE
           WHEN w.depth_5yr_ago IS NOT NULL
@@ -115,18 +153,17 @@ def main() -> None:
       r.rain_3m_mm,
       r.rain_6m_mm,
       r.rain_12m_mm,
+      r.rain_24m_mm,
       r.rain_3m_normal_mm,
       r.rain_6m_normal_mm,
       r.rain_12m_normal_mm,
-      ROUND(
-        CASE
-          WHEN r.rain_6m_normal_mm > 0
-          THEN ((r.rain_6m_mm - r.rain_6m_normal_mm) / r.rain_6m_normal_mm) * 100.0
-          ELSE 0.0
-        END,
-      2) AS rain_departure_6m_pct,
-      b.extraction_stage_code,
+      r.rain_24m_normal_mm,
+      ROUND(CASE WHEN r.rain_6m_normal_mm > 0 THEN ((r.rain_6m_mm - r.rain_6m_normal_mm) / r.rain_6m_normal_mm) * 100.0 ELSE 0.0 END, 2) AS rain_departure_6m_pct,
+      ROUND(CASE WHEN r.rain_12m_normal_mm > 0 THEN ((r.rain_12m_mm - r.rain_12m_normal_mm) / r.rain_12m_normal_mm) * 100.0 ELSE 0.0 END, 2) AS rain_departure_12m_pct,
+      ROUND(CASE WHEN r.rain_24m_normal_mm > 0 THEN ((r.rain_24m_mm - r.rain_24m_normal_mm) / r.rain_24m_normal_mm) * 100.0 ELSE 0.0 END, 2) AS rain_departure_24m_pct,
+      w.extraction_stage_code,
       w.well_count,
+      w.block_past_obs_count,
       w.block_total_obs,
       w.is_imputed,
       CASE
@@ -142,8 +179,7 @@ def main() -> None:
         THEN w.raw_target_depth_next
         ELSE NULL
       END AS target_depth_next
-    FROM wl_lags w
-    JOIN wellcast.block b ON w.block_id = b.block_id
+    FROM wl_with_target_clim w
     LEFT JOIN rain_rolling r
       ON w.block_id = r.block_id
      AND date_trunc('month', w.obs_date) = r.month
@@ -151,7 +187,6 @@ def main() -> None:
     """
     con.execute(feature_sql)
 
-    # Mandatory Anti-Leakage Audits (Task T2.2)
     dup_cnt = con.execute(
         "SELECT COUNT(*) FROM (SELECT block_id, obs_date FROM wellcast.features GROUP BY 1, 2 HAVING COUNT(*) > 1)"
     ).fetchone()[0]
@@ -185,8 +220,6 @@ def main() -> None:
         ) TO '{train_out}' (FORMAT PARQUET);
         """
     )
-
-    # Latest seasonal observation per block for forecasting upcoming season
     con.execute(
         f"""
         COPY (
@@ -201,6 +234,7 @@ def main() -> None:
 
     infer_cnt = con.execute(f"SELECT COUNT(*) FROM read_parquet('{infer_out}')").fetchone()[0]
     audit = {
+        "feature_schema_version": "v2_hydro_spatial_equilibrium",
         "total_feature_rows": int(con.execute("SELECT COUNT(*) FROM wellcast.features").fetchone()[0]),
         "clean_ml_train_rows": int(train_rows),
         "latest_inference_blocks": int(infer_cnt),

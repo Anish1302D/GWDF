@@ -1,8 +1,8 @@
-"""Phase 4 Batch Forecast & Precomputed Scenario Engine + Static API JSON Exporter.
+"""Phase 4 v2 Batch Forecast & Precomputed Scenario Engine + Static API JSON Exporter.
 
-Scores next-season groundwater depth (`mbgl`), P10-P90 uncertainty bounds, and calibrated
-risk classes across 4 rainfall scenarios (`normal` 100%, `minus10` 90%, `minus20` 80%, `minus30` 70%),
-verifies Athena serving views via DuckDB, and exports static JSON files under `data/processed_local/api/`.
+Scores next-season groundwater depth (`mbgl`), CQR-calibrated P10-P90 uncertainty bounds,
+and calibrated risk classes across 4 rainfall scenarios (`normal` 100%, `minus10` 90%,
+`minus20` 80%, `minus30` 70%) using the Dual Season-Specialist + Global Monotone XGBoost ensemble.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from ml.evaluate import FEATURE_COLUMNS, enforce_prediction_bounds  # noqa: E402
 from ml.risk_rules import classify_risk, get_advice  # noqa: E402
+from ml.train import predict_blended_delta  # noqa: E402
 
 SCENARIO_CONFIG: list[tuple[str, int, float]] = [
     ("normal", 100, 1.00),
@@ -40,7 +41,9 @@ def _next_season_label(obs_date_str: str, season: str) -> str:
     return f"{yr + 1}-pre-monsoon"
 
 
-def _load_models(artifacts_dir: Path) -> tuple[xgb.XGBRegressor, xgb.XGBRegressor, xgb.XGBRegressor, dict[str, Any]]:
+def _load_models(
+    artifacts_dir: Path,
+) -> tuple[xgb.XGBRegressor, xgb.XGBRegressor | None, xgb.XGBRegressor | None, xgb.XGBRegressor, xgb.XGBRegressor, dict[str, Any]]:
     metrics = json.loads((artifacts_dir / "metrics.json").read_text(encoding="utf-8"))
     m_p50 = xgb.XGBRegressor()
     m_p10 = xgb.XGBRegressor()
@@ -48,19 +51,38 @@ def _load_models(artifacts_dir: Path) -> tuple[xgb.XGBRegressor, xgb.XGBRegresso
     m_p50.load_model(str(artifacts_dir / "model_p50.json"))
     m_p10.load_model(str(artifacts_dir / "model_p10.json"))
     m_p90.load_model(str(artifacts_dir / "model_p90.json"))
-    return m_p50, m_p10, m_p90, metrics
+
+    m_pre = None
+    m_post = None
+    if (artifacts_dir / "model_pre_p50.json").is_file() and (artifacts_dir / "model_post_p50.json").is_file():
+        m_pre = xgb.XGBRegressor()
+        m_post = xgb.XGBRegressor()
+        m_pre.load_model(str(artifacts_dir / "model_pre_p50.json"))
+        m_post.load_model(str(artifacts_dir / "model_post_p50.json"))
+
+    return m_p50, m_pre, m_post, m_p10, m_p90, metrics
 
 
 def _build_scenario_features(infer_df: pd.DataFrame, mult: float) -> pd.DataFrame:
     df_s = infer_df.copy()
     r3_norm = df_s["rain_3m_normal_mm"].fillna(df_s["rain_3m_mm"]).clip(lower=0.0)
     r6_norm = df_s["rain_6m_normal_mm"].fillna(df_s["rain_6m_mm"]).clip(lower=0.0)
-    prior_6m = (df_s["rain_12m_mm"] - df_s["rain_6m_mm"]).clip(lower=0.0)
+    r12_norm = df_s["rain_12m_normal_mm"].fillna(df_s["rain_12m_mm"]).clip(lower=1.0)
+    r24_norm = df_s["rain_24m_normal_mm"].fillna(df_s["rain_24m_mm"]).clip(lower=1.0)
+
+    # Perturb full annual/seasonal monsoon recharge budget by multiplier `mult`
+    prior_12m = (df_s["rain_24m_mm"] - df_s["rain_12m_mm"]).clip(lower=0.0)
 
     df_s["rain_3m_mm"] = (mult * r3_norm).round(2)
     df_s["rain_6m_mm"] = (mult * r6_norm).round(2)
-    df_s["rain_12m_mm"] = (prior_6m + df_s["rain_6m_mm"]).round(2)
+    df_s["rain_12m_mm"] = (mult * r12_norm).round(2)
+    df_s["rain_24m_mm"] = (prior_12m + df_s["rain_12m_mm"]).round(2)
+
     df_s["rain_departure_6m_pct"] = round((mult - 1.0) * 100.0, 2)
+    df_s["rain_departure_12m_pct"] = round((mult - 1.0) * 100.0, 2)
+    df_s["rain_departure_24m_pct"] = (
+        ((df_s["rain_24m_mm"] - r24_norm) / r24_norm) * 100.0
+    ).round(2)
 
     X = df_s[FEATURE_COLUMNS].copy()
     for c in FEATURE_COLUMNS:
@@ -80,34 +102,33 @@ def main() -> None:
     rain_df = pd.read_parquet(processed / "raw" / "rainfall_monthly" / "rainfall_monthly.parquet")
     infer_df = pd.read_parquet(processed / "curated" / "ml_inference" / "latest_features.parquet")
 
-    m_p50, m_p10, m_p90, metrics = _load_models(artifacts_dir)
+    m_p50, m_pre, m_post, m_p10, m_p90, metrics = _load_models(artifacts_dir)
     thresholds = metrics["calibrated_risk_thresholds"]
     model_version = metrics["model_version"]
-    use_conformal = bool(metrics.get("conformal_residual_adjustment", False))
+    cqr_offset = float(metrics.get("cqr_offset_mbgl", 0.0))
+    blend_weights = metrics.get("season_blend_weights")
     res_q10 = float(metrics.get("residual_q10_mbgl", -1.2))
     res_q90 = float(metrics.get("residual_q90_mbgl", 1.2))
     use_fallback = metrics.get("active_serving_strategy") == "baseline_plus_trend_fallback"
+    is_residual = metrics.get("target_formulation") == "residual_over_seasonal_naive"
     generated_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Determine dominant statewide forecast season label
     infer_df["obs_date_str"] = infer_df["obs_date"].astype(str)
     infer_df["next_season_label"] = [
         _next_season_label(d, s) for d, s in zip(infer_df["obs_date_str"], infer_df["season"])
     ]
     dominant_forecast_season = str(infer_df["next_season_label"].mode().iloc[0])
 
-    # Eligible blocks: >= 4 historical seasonal readings and latest observation >= 2022
     infer_df["latest_year"] = infer_df["obs_date_str"].str.slice(0, 4).astype(int)
     eligible_mask = (infer_df["block_total_obs"] >= 4) & (infer_df["latest_year"] >= 2022)
     eligible_df = infer_df[eligible_mask].copy().reset_index(drop=True)
 
-    is_residual = metrics.get("target_formulation") == "residual_over_seasonal_naive"
-
-    # Score all 4 scenarios on eligible blocks
     scenario_predictions: dict[str, dict[str, dict[str, Any]]] = {}
+    s_codes = eligible_df["season_code"].to_numpy()
+    base_anchor = eligible_df["prev_depth_mbgl"].fillna(eligible_df["depth_mbgl"]).to_numpy(dtype=float)
+
     for scen_key, rain_pct, mult in SCENARIO_CONFIG:
         X_s = _build_scenario_features(eligible_df, mult)
-        base_anchor = eligible_df["prev_depth_mbgl"].fillna(eligible_df["depth_mbgl"]).to_numpy(dtype=float)
         if use_fallback:
             trend = np.clip(eligible_df["depth_trend_5yr"].fillna(0.0).to_numpy(dtype=float), -2.0, 2.0)
             drought_bump = (1.0 - mult) * 3.5
@@ -116,20 +137,19 @@ def main() -> None:
             p90_raw = p50_raw + res_q90
         else:
             offset = base_anchor if is_residual else 0.0
-            p50_raw = offset + m_p50.predict(X_s)
-            p10_raw = offset + m_p10.predict(X_s)
-            p90_raw = offset + m_p90.predict(X_s)
-            if use_conformal:
-                p10_raw = np.minimum(p10_raw, p50_raw + res_q10)
-                p90_raw = np.maximum(p90_raw, p50_raw + res_q90)
+            if m_pre is not None and m_post is not None and blend_weights is not None:
+                delta_pred = predict_blended_delta(X_s, s_codes, m_p50, m_pre, m_post, blend_weights)
+            else:
+                delta_pred = m_p50.predict(X_s)
+            p50_raw = offset + delta_pred
+            p10_raw = offset + m_p10.predict(X_s) - cqr_offset
+            p90_raw = offset + m_p90.predict(X_s) + cqr_offset
 
         p50, low, high = enforce_prediction_bounds(p50_raw, p10_raw, p90_raw)
         scen_map: dict[str, dict[str, Any]] = {}
         for idx, row in enumerate(eligible_df.itertuples(index=False)):
             ref_same_season = (
-                float(row.prev_depth_mbgl)
-                if pd.notna(row.prev_depth_mbgl)
-                else float(row.depth_mbgl)
+                float(row.prev_depth_mbgl) if pd.notna(row.prev_depth_mbgl) else float(row.depth_mbgl)
             )
             yoy_delta = round(float(p50[idx]) - ref_same_season, 2)
             trend_5 = float(row.depth_trend_5yr) if pd.notna(row.depth_trend_5yr) else 0.0
@@ -151,7 +171,6 @@ def main() -> None:
             }
         scenario_predictions[scen_key] = scen_map
 
-    # Scenario monotonicity verification across eligible blocks
     means = {
         s: round(float(np.mean([v["predicted_depth_mbgl"] for v in scenario_predictions[s].values()])), 3)
         for s, _, _ in SCENARIO_CONFIG
@@ -160,7 +179,6 @@ def main() -> None:
         f"Scenario monotonicity violated! Mean predicted depths: {means}"
     )
 
-    # Prepare directories for static API JSON files
     for scen_key, _, _ in SCENARIO_CONFIG:
         (api_dir / "forecasts" / scen_key).mkdir(parents=True, exist_ok=True)
     (api_dir / "history").mkdir(parents=True, exist_ok=True)
@@ -171,13 +189,18 @@ def main() -> None:
     for scen_key, rain_pct, _ in SCENARIO_CONFIG:
         blocks_list: list[dict[str, Any]] = []
         rankings_list: list[dict[str, Any]] = []
-        summary_counts = {"total_blocks": int(len(blocks_df)), "critical": 0, "watch": 0, "safe": 0, "insufficient_data": 0}
+        summary_counts = {
+            "total_blocks": int(len(blocks_df)),
+            "critical": 0,
+            "watch": 0,
+            "safe": 0,
+            "insufficient_data": 0,
+        }
 
         for b in blocks_df.itertuples(index=False):
             pred_info = scenario_predictions[scen_key].get(b.block_id)
             if pred_info is None:
                 summary_counts["insufficient_data"] += 1
-                f_season = dominant_forecast_season
                 payload = {
                     "block_id": b.block_id,
                     "state": b.state,
@@ -186,7 +209,7 @@ def main() -> None:
                     "granularity": b.granularity,
                     "scenario": scen_key,
                     "rainfall_pct_of_normal": rain_pct,
-                    "forecast_season": f_season,
+                    "forecast_season": dominant_forecast_season,
                     "current_obs_date": None,
                     "current_depth_mbgl": None,
                     "predicted_depth_mbgl": None,
@@ -251,7 +274,6 @@ def main() -> None:
             (api_dir / "forecasts" / scen_key / f"{b.block_id}.json").write_text(
                 json.dumps(payload, ensure_ascii=False), encoding="utf-8"
             )
-
             blocks_list.append(
                 {
                     "block_id": b.block_id,
@@ -270,7 +292,6 @@ def main() -> None:
                     "risk_score": payload["risk_score"],
                 }
             )
-
             parquet_rows.append(
                 {
                     "block_id": b.block_id,
@@ -304,9 +325,7 @@ def main() -> None:
         if scen_key == "normal":
             (api_dir / "blocks.json").write_text(json.dumps(blocks_doc, ensure_ascii=False), encoding="utf-8")
 
-        rankings_list.sort(
-            key=lambda r: (r["risk_score"], r["predicted_depth_mbgl"] or 0.0), reverse=True
-        )
+        rankings_list.sort(key=lambda r: (r["risk_score"], r["predicted_depth_mbgl"] or 0.0), reverse=True)
         for idx, item in enumerate(rankings_list, start=1):
             item["rank"] = idx
 
@@ -325,7 +344,6 @@ def main() -> None:
                 json.dumps(rank_doc, ensure_ascii=False), encoding="utf-8"
             )
 
-    # Export per-block historical water levels & monsoon rainfall JSONs
     wl_sorted = wl_df.sort_values(["block_id", "obs_date"])
     wl_by_blk = {k: g for k, g in wl_sorted.groupby("block_id")}
 
@@ -347,44 +365,40 @@ def main() -> None:
 
     for b in blocks_df.itertuples(index=False):
         g_wl = wl_by_blk.get(b.block_id)
-        wl_items = []
-        if g_wl is not None:
-            for r in g_wl.tail(24).itertuples(index=False):
-                wl_items.append(
-                    {
-                        "obs_date": str(r.obs_date),
-                        "season": r.season,
-                        "depth_mbgl": float(r.depth_mbgl),
-                        "well_count": int(r.well_count),
-                        "is_imputed": bool(r.is_imputed),
-                    }
-                )
-
+        wl_items = [
+            {
+                "obs_date": str(r.obs_date),
+                "season": r.season,
+                "depth_mbgl": float(r.depth_mbgl),
+                "well_count": int(r.well_count),
+                "is_imputed": bool(r.is_imputed),
+            }
+            for r in (g_wl.tail(24).itertuples(index=False) if g_wl is not None else [])
+        ]
         g_rn = rain_by_blk.get(b.block_id)
-        rn_items = []
-        if g_rn is not None:
-            for r in g_rn.tail(12).itertuples(index=False):
-                rn_items.append(
-                    {
-                        "period": f"{int(r.yr)}-monsoon",
-                        "rainfall_mm": round(float(r.rainfall_mm), 1),
-                        "normal_mm": round(float(r.normal_mm), 1),
-                        "departure_pct": float(r.departure_pct),
-                    }
-                )
-
-        hist_doc = {
-            "block_id": b.block_id,
-            "block_name": b.block_name,
-            "district": b.district,
-            "water_levels": wl_items,
-            "rainfall_seasonal": rn_items,
-        }
+        rn_items = [
+            {
+                "period": f"{int(r.yr)}-monsoon",
+                "rainfall_mm": round(float(r.rainfall_mm), 1),
+                "normal_mm": round(float(r.normal_mm), 1),
+                "departure_pct": float(r.departure_pct),
+            }
+            for r in (g_rn.tail(12).itertuples(index=False) if g_rn is not None else [])
+        ]
         (api_dir / "history" / f"{b.block_id}.json").write_text(
-            json.dumps(hist_doc, ensure_ascii=False), encoding="utf-8"
+            json.dumps(
+                {
+                    "block_id": b.block_id,
+                    "block_name": b.block_name,
+                    "district": b.district,
+                    "water_levels": wl_items,
+                    "rainfall_seasonal": rn_items,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
         )
 
-    # Save forecasts Parquet and run Athena Serving View verification in DuckDB
     forecasts_df = pd.DataFrame(parquet_rows)
     f_parquet_path = forecasts_parquet_dir / "forecasts.parquet"
     forecasts_df.to_parquet(f_parquet_path, index=False)
@@ -398,7 +412,9 @@ def main() -> None:
         "holdout_mae_mbgl": metrics["holdout_evaluation"]["xgboost_model"]["mae"],
         "baseline_mae_mbgl": metrics["holdout_evaluation"]["baseline_seasonal_naive"]["mae"],
         "skill_vs_baseline_pct": metrics["holdout_evaluation"]["skill_vs_baseline_pct"],
+        "rmse_skill_vs_baseline_pct": metrics["holdout_evaluation"]["rmse_skill_vs_baseline_pct"],
         "p10_p90_coverage_pct": metrics["holdout_evaluation"]["p10_p90_coverage_pct"],
+        "mean_interval_width_mbgl": metrics["holdout_evaluation"]["mean_interval_width_mbgl"],
         "scenario_mean_predicted_depth_mbgl": means,
         "generated_at": generated_ts,
     }
@@ -415,7 +431,7 @@ def main() -> None:
         LIMIT 5
         """
     ).fetchdf()
-    print("=== FORECAST GENERATION SUMMARY ===")
+    print("=== V2 FORECAST GENERATION SUMMARY ===")
     print(json.dumps(meta_doc, indent=2))
     print("=== TOP 5 AT-RISK BLOCKS (NORMAL SCENARIO) ===")
     print(top5.to_string(index=False))
